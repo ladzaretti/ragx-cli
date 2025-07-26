@@ -1,0 +1,24 @@
+version: 2
+
+builds:
+  - id: "ragrat"
+    main: ./cmd/ragrat
+    binary: ragrat
+    goos:
+      - linux
+    ldflags:
+      - -X main.Version={{ if .IsSnapshot }}{{ .Version }}{{ else }}{{ .Tag }}{{ end }}
+
+snapshot:
+  version_template: "{{ .Version }}-devel+{{ .ShortCommit }}"
+
+archives:
+  - id: "ragrat"
+    name_template: "ragrat_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    wrap_in_directory: true
+
+    files:
+      - UNLICENSE
+
+    ids: [ragrat]
+    formats: [tar.gz]
