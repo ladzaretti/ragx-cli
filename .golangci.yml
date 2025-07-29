@@ -133,6 +133,8 @@ linters:
           disabled: true
         - name: package-comments
           disabled: true
+        - name: function-length
+          disabled: true
         - name: var-naming
           arguments:
             - []

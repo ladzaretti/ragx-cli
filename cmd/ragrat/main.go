@@ -3,71 +3,136 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"log/slog"
-	"os"
-	"slices"
 
 	"github.com/ladzaretti/ragrat/llm"
 )
 
 const (
-	localhost    = "http://localhost:11434/v1"
-	model        = "hf.co/unsloth/DeepSeek-R1-0528-Qwen3-8B-GGUF:Q4_K_XL"
-	embedding    = "nomic-embed-text:v1.5"
-	systemPrompt = `
-**Your Role and Instructions:**
-You are an AI assistant that answers questions using text from a provided CONTEXT. Follow these rules precisely:
+	localhost = "http://localhost:11434/v1"
+	// model        = "hf.co/unsloth/DeepSeek-R1-0528-Qwen3-8B-GGUF:Q4_K_XL"
+	// model = "qwen3:8b"
+	model = "llama3.1:8b"
+	// model = "qwen2.5-coder:14b"
+	// model     = "deepseek-r1:8b"
+	embedding = "nomic-embed-text:v1.5"
+	// systemPrompt = `
+	// **Your Role and Instructions:**
+	// You are an AI assistant that answers questions using text from a provided CONTEXT and by optionally calling tools.
 
-1.  Your answers must be based exclusively on the information found within the CONTEXT section of the user's message.
-2.  Do not use any of your pre-existing knowledge or any information from outside the provided CONTEXT.
-3.  Directly address the user's QUESTION. Do not add conversational fluff or extraneous details.
-4.  If the CONTEXT does not contain the information needed to answer the QUESTION, you must respond with the exact phrase: "The provided context does not contain the information to answer this question."
-5.  Answer in concise, clear English.
-`
+	// - Use the CONTEXT as your primary source of truth.
+	// - If the CONTEXT does not contain enough information, you may use available tools to gather the necessary data.
+	// - Do not use your own pre-trained knowledge unless explicitly instructed to do so.
+	// - Always respond directly to the QUESTION.
+	// - If you cannot answer using the CONTEXT or tools, respond with: "The provided context does not contain the information to answer this question."
+	// `
+	systemPrompt = "You may use get_city_found_year to answer questions about a city's founding year."
+	// systemPrompt = "You are an assistant that can call tools. When calling a function, respond using the OpenAI tool_call."
 )
 
 func main() {
-	client := llm.New(
-		llm.WithBaseURL(localhost),
-	)
-
-	slog.Info("starting chat",
-		"model", model,
-		"baseUrl", localhost,
-	)
+	fmt.Println()
+	client, err := llm.NewOpenAIClient(llm.WithBaseURL(localhost))
+	if err != nil {
+		log.Fatalf("failed to create client: %v", err)
+	}
+	defer client.Close()
 
 	ctx := context.Background()
 
-	models, err := client.ListModels(ctx)
+	embedReq := llm.EmbedRequest{
+		Model: embedding,
+		Input: "embedding this chunk",
+	}
+
+	embedRes, err := client.Embed(ctx, embedReq)
 	if err != nil {
-		panic(err)
+		slog.Error("embedding error", "err", err)
+	} else {
+		slog.Info("embed success", "vector", embedRes.Vector())
 	}
 
-	if !slices.Contains(models, model) {
-		slog.Error("llm model not available", "model", model)
-		os.Exit(1)
+	embedBatchReq := llm.EmbedBatchRequest{
+		Model: embedding,
+		Input: []string{"embedding this chunk - batch 1", "embedding this chunk - batch 2"},
 	}
 
-	if !slices.Contains(models, embedding) {
-		slog.Error("embedding model not available", "model", model)
-		os.Exit(1)
-	}
-
-	slog.Info("available models", "models", models)
-
-	retrieve := "Ramat Gan was founded in 1921 as a satellite city of Tel Aviv. It is home to one of the world's major diamond exchanges."
-	question := "When was Tel aviv founded?"
-
-	vector, err := client.Embedding(ctx, embedding, question)
+	embedBatchRes, err := client.EmbedBatch(ctx, embedBatchReq)
 	if err != nil {
-		panic(err)
+		slog.Error("embedding error", "err", err)
+	} else {
+		slog.Info("embed success", "vectors", embedBatchRes.Vectors())
 	}
 
-	slog.Info("embedding vector created", "dims", len(vector))
+	// Start a new chat with a system prompt and model
+	chat := client.StartChat("You are a helpful assistant.", model)
 
-	request := llm.NewRagParamsBuilder(model, systemPrompt, retrieve, question)
-
-	if err := client.ChatStreaming(ctx, os.Stdout, request.Build()); err != nil {
-		fmt.Printf("chat error: %v", err)
+	// Perform a single exchange
+	resp, err := chat.Send(ctx, "What's the capital of France?")
+	if err != nil {
+		log.Fatalf("chat send failed: %v", err)
 	}
+
+	// Extract and print all candidate parts
+	for _, c := range resp.Candidates() {
+		for _, part := range c.Parts() {
+			if text, ok := part.AsText(); ok {
+				fmt.Println(">>", text)
+			}
+		}
+	}
+
+	stream, err := chat.SendStreaming(ctx, "Write a short poem about the sea.")
+	if err != nil {
+		log.Fatalf("streaming failed: %v", err)
+	}
+	var streamedText string
+	var llmError error
+
+	for response, err := range stream {
+		if err != nil {
+			slog.Error("error reading streaming LLM response")
+			llmError = err
+			break
+		}
+		if response == nil {
+			break
+		}
+
+		if len(response.Candidates()) == 0 {
+			slog.Error("No candidates in response")
+
+			break
+		}
+
+		candidate := response.Candidates()[0]
+
+		for _, part := range candidate.Parts() {
+			if text, ok := part.AsText(); ok {
+				streamedText += text
+				fmt.Print(text)
+			}
+		}
+	}
+
+	if err != nil {
+		slog.Error("error analyzing tool calls", "err", llmError)
+	}
+
+	resp, err = chat.Send(ctx, "can you repeat that ?")
+	if err != nil {
+		log.Fatalf("chat send failed: %v", err)
+	}
+
+	// Extract and print all candidate parts
+	for _, c := range resp.Candidates() {
+		for _, part := range c.Parts() {
+			if text, ok := part.AsText(); ok {
+				fmt.Println(">>", text)
+			}
+		}
+	}
+
+	fmt.Println() // final newline
 }
