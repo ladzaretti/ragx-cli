@@ -7,7 +7,7 @@ import (
 	"net/http"
 )
 
-// APIError represents an error returned by the LLM client.
+// APIError wraps an HTTP error returned by the LLM provider.
 type APIError struct {
 	StatusCode int
 	Message    string
@@ -16,18 +16,18 @@ type APIError struct {
 
 func (e *APIError) Error() string {
 	if e.Err != nil {
-		return fmt.Sprintf("API Error: Status=%d, Message='%s', OriginalErr=%v", e.StatusCode, e.Message, e.Err)
+		return fmt.Sprintf("API Error: status=%d, message=%q, cause=%v", e.StatusCode, e.Message, e.Err)
 	}
 
-	return fmt.Sprintf("API Error: Status=%d, Message='%s'", e.StatusCode, e.Message)
+	return fmt.Sprintf("API Error: status=%d, message=%q", e.StatusCode, e.Message)
 }
 
 func (e *APIError) Unwrap() error {
 	return e.Err
 }
 
-// DefaultIsRetryableError provides a default implementation
-// based on common HTTP codes and network errors.
+// DefaultIsRetryableError returns true if the error is retryable.
+// It handles common HTTP codes and network timeouts.
 func DefaultIsRetryableError(err error) bool {
 	if err == nil {
 		return false
@@ -36,12 +36,13 @@ func DefaultIsRetryableError(err error) bool {
 	var apiErr *APIError
 	if errors.As(err, &apiErr) {
 		switch apiErr.StatusCode {
-		case http.StatusConflict, http.StatusTooManyRequests,
-			http.StatusInternalServerError, http.StatusBadGateway,
-			http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+		case http.StatusConflict,
+			http.StatusTooManyRequests,
+			http.StatusInternalServerError,
+			http.StatusBadGateway,
+			http.StatusServiceUnavailable,
+			http.StatusGatewayTimeout:
 			return true
-		default:
-			return false
 		}
 	}
 

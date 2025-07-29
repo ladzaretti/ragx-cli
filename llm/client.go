@@ -11,59 +11,52 @@ import (
 	"github.com/openai/openai-go/option"
 )
 
-// Package-level env var storage (OpenAI env).
 var (
 	openAIAPIKey  string
 	openAIAPIBase string
 	openAIModel   string
 )
 
-// init reads and caches OpenAI environment variables:
-//   - OPENAI_API_KEY, OPENAI_ENDPOINT, OPENAI_API_BASE, OPENAI_MODEL
-//
-// These serve as defaults; the model can be overridden by the Cobra --model flag.
-// After loading env values, it registers the OpenAI provider factory.
-func MustInitialize() {
+// InitEnv loads OpenAI-related environment variables.
+// These act as fallbacks for client options.
+func InitEnv() {
 	openAIAPIKey = os.Getenv("OPENAI_API_KEY")
 	openAIAPIBase = os.Getenv("OPENAI_API_BASE")
 	openAIModel = os.Getenv("OPENAI_MODEL")
 }
 
-// OpenAIClient implements the gollm.Client interface for OpenAI models.
+// OpenAIClient implements Client using the OpenAI API.
 type OpenAIClient struct {
 	client openai.Client
 }
 
-// Ensure OpenAIClient implements the Client interface.
 var _ Client = &OpenAIClient{}
 
 type clientOptions struct {
 	baseURL string
 	apiKey  string
-
-	// Extend with more options as needed
 }
 
-// Option is a functional option for configuring ClientOptions.
+// Option configures the OpenAI client.
 type Option func(*clientOptions)
 
+// WithBaseURL sets a custom API base URL.
 func WithBaseURL(baseURL string) Option {
 	return func(o *clientOptions) {
 		o.baseURL = baseURL
 	}
 }
 
+// WithAPIKey sets a custom API key.
 func WithAPIKey(key string) Option {
 	return func(o *clientOptions) {
 		o.apiKey = key
 	}
 }
 
-// NewOpenAIClient creates a new client for interacting with OpenAI.
-// Supports custom HTTP client (e.g., for skipping SSL verification).
+// NewOpenAIClient creates a new OpenAI client.
 func NewOpenAIClient(opts ...Option) (*OpenAIClient, error) {
 	c := &clientOptions{}
-
 	for _, opt := range opts {
 		opt(c)
 	}
@@ -78,13 +71,12 @@ func NewOpenAIClient(opts ...Option) (*OpenAIClient, error) {
 		apiKey = openAIAPIKey
 	}
 
-	options := []option.RequestOption{}
-
-	if len(c.baseURL) > 0 {
+	var options []option.RequestOption
+	if baseURL != "" {
 		options = append(options, option.WithBaseURL(baseURL))
 	}
 
-	if len(c.apiKey) > 0 {
+	if apiKey != "" {
 		options = append(options, option.WithAPIKey(apiKey))
 	}
 
@@ -93,17 +85,16 @@ func NewOpenAIClient(opts ...Option) (*OpenAIClient, error) {
 	}, nil
 }
 
-// Close cleans up any resources used by the client.
+// Close releases any resources (no-op for OpenAI).
 func (*OpenAIClient) Close() error {
-	// No specific cleanup needed for the OpenAI client currently.
 	return nil
 }
 
-// StartChat starts a new chat session.
+// StartChat creates a new chat session with optional system prompt.
 func (c *OpenAIClient) StartChat(systemPrompt, model string) Chat { //nolint:ireturn
 	selectedModel := getOpenAIModel(model)
 
-	slog.Debug("Starting new chat session with model", "selectedModel", selectedModel)
+	slog.Debug("Starting new chat session", "model", selectedModel)
 
 	history := []openai.ChatCompletionMessageParamUnion{}
 	if systemPrompt != "" {
@@ -117,25 +108,22 @@ func (c *OpenAIClient) StartChat(systemPrompt, model string) Chat { //nolint:ire
 	}
 }
 
-// simpleCompletionResponse is a basic implementation of CompletionResponse.
 type simpleCompletionResponse struct {
 	content string
 }
 
-// Response returns the completion content.
 func (r *simpleCompletionResponse) Response() string {
 	return r.content
 }
 
-// UsageMetadata returns nil for now.
 func (*simpleCompletionResponse) UsageMetadata() any {
 	return nil
 }
 
-// GenerateCompletion sends a completion request to the OpenAI API.
+// GenerateCompletion creates a single-turn completion from a prompt.
 func (c *OpenAIClient) GenerateCompletion(ctx context.Context, req *CompletionRequest) (CompletionResponse, error) { //nolint:ireturn
-	slog.Info("OpenAI GenerateCompletion called with model", "model", req.Model)
-	slog.Debug("Prompt for completion", "prompt", req.Prompt)
+	slog.Info("Generating completion", "model", req.Model)
+	slog.Debug("Prompt", "text", req.Prompt)
 
 	completion, err := c.client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
 		Model: req.Model,
@@ -144,29 +132,23 @@ func (c *OpenAIClient) GenerateCompletion(ctx context.Context, req *CompletionRe
 		},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate OpenAI completion: %w", err)
+		return nil, fmt.Errorf("completion failed: %w", err)
 	}
 
-	// Check if there are choices and a message
 	if len(completion.Choices) == 0 || completion.Choices[0].Message.Content == "" {
-		return nil, errors.New("received an empty response from OpenAI")
+		return nil, errors.New("empty completion response")
 	}
 
-	// Return the content of the first choice
-	resp := &simpleCompletionResponse{
+	return &simpleCompletionResponse{
 		content: completion.Choices[0].Message.Content,
-	}
-
-	return resp, nil
+	}, nil
 }
 
-// ListModels returns a slice of strings with model IDs.
-// Note: This may not work with all OpenAI-compatible providers if they don't fully implement
-// the Models.List endpoint or return data in a different format.
+// ListModels returns available model IDs.
 func (c *OpenAIClient) ListModels(ctx context.Context) ([]string, error) {
 	res, err := c.client.Models.List(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("error listing models from OpenAI: %w", err)
+		return nil, fmt.Errorf("failed to list models: %w", err)
 	}
 
 	modelIDs := make([]string, 0, len(res.Data))
@@ -190,6 +172,7 @@ func (r *openAIEmbedResponse) UsageMetadata() any {
 	return r.usage
 }
 
+// Embed returns the embedding for a single input.
 func (c *OpenAIClient) Embed(ctx context.Context, req EmbedRequest) (EmbedResponse, error) { //nolint:ireturn
 	params := openai.EmbeddingNewParams{
 		Input: openai.EmbeddingNewParamsInputUnion{OfString: openai.String(req.Input)},
@@ -204,7 +187,7 @@ func (c *OpenAIClient) Embed(ctx context.Context, req EmbedRequest) (EmbedRespon
 	}
 
 	if len(res.Data) == 0 {
-		return nil, errors.New("no embedding data returned from API")
+		return nil, errors.New("no embedding returned")
 	}
 
 	return &openAIEmbedResponse{
@@ -226,13 +209,14 @@ func (r *openAIEmbedBatchResponse) UsageMetadata() any {
 	return r.usage
 }
 
+// EmbedBatch returns embeddings for multiple inputs.
 func (c *OpenAIClient) EmbedBatch(ctx context.Context, req EmbedBatchRequest) (EmbedBatchResponse, error) { //nolint:ireturn
 	params := openai.EmbeddingNewParams{
 		Input: openai.EmbeddingNewParamsInputUnion{OfArrayOfStrings: req.Input},
 		Model: req.Model,
 	}
 
-	slog.Info("Calling embedding batch API", "model", req.Model, "input_count", len(req.Input))
+	slog.Info("Calling batch embedding API", "model", req.Model, "input_count", len(req.Input))
 
 	res, err := c.client.Embeddings.New(ctx, params)
 	if err != nil {
@@ -254,22 +238,18 @@ func (c *OpenAIClient) EmbedBatch(ctx context.Context, req EmbedBatchRequest) (E
 	}, nil
 }
 
-// getOpenAIModel returns the appropriate model based on configuration and explicitly provided model name.
+// getOpenAIModel selects a model from env or fallback.
 func getOpenAIModel(model string) string {
-	// If explicit model is provided, use it
 	if model != "" {
-		slog.Info("Using explicitly provided model", "model", model)
+		slog.Info("Using model from request", "model", model)
 		return model
 	}
 
-	// Check configuration
-	configModel := openAIModel
-	if configModel != "" {
-		slog.Info("Using model from config", "configModel", configModel)
-		return configModel
+	if openAIModel != "" {
+		slog.Info("Using model from env", "model", openAIModel)
+		return openAIModel
 	}
 
-	// Default model as fallback
 	slog.Info("No model specified, defaulting to gpt-4.1")
 
 	return "gpt-4.1"

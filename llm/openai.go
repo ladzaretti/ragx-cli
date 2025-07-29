@@ -6,7 +6,7 @@ import (
 	openai "github.com/openai/openai-go"
 )
 
-// openAIChatResponse implements ChatResponse for non-streaming chat.
+// openAIChatResponse is a non-streaming chat response.
 type openAIChatResponse struct {
 	openaiCompletion *openai.ChatCompletion
 }
@@ -27,7 +27,6 @@ func (r *openAIChatResponse) Candidates() []Candidate {
 	}
 
 	candidates := make([]Candidate, len(r.openaiCompletion.Choices))
-
 	for i, choice := range r.openaiCompletion.Choices {
 		candidates[i] = &openAICandidate{openaiChoice: &choice}
 	}
@@ -35,7 +34,7 @@ func (r *openAIChatResponse) Candidates() []Candidate {
 	return candidates
 }
 
-// openAICandidate implements Candidate for standard chat responses.
+// openAICandidate represents a choice in a chat response.
 type openAICandidate struct {
 	openaiChoice *openai.ChatCompletionChoice
 }
@@ -48,7 +47,6 @@ func (c *openAICandidate) Parts() []Part {
 	}
 
 	var parts []Part
-
 	if c.openaiChoice.Message.Content != "" {
 		parts = append(parts, &openAIPart{content: c.openaiChoice.Message.Content})
 	}
@@ -67,11 +65,10 @@ func (c *openAICandidate) String() string {
 		content = c.openaiChoice.Message.Content
 	}
 
-	return fmt.Sprintf("Candidate(FinishReason: %s, Content: %q)",
-		c.openaiChoice.FinishReason, content)
+	return fmt.Sprintf("Candidate(FinishReason: %s, Content: %q)", c.openaiChoice.FinishReason, content)
 }
 
-// openAIPart implements Part.
+// openAIPart is a text part of a response.
 type openAIPart struct {
 	content string
 }
@@ -82,7 +79,7 @@ func (p *openAIPart) AsText() (string, bool) {
 	return p.content, p.content != ""
 }
 
-// openAIChatStreamResponse implements ChatResponse for streaming.
+// openAIChatStreamResponse is a streaming chat response.
 type openAIChatStreamResponse struct {
 	streamChunk openai.ChatCompletionChunk
 	accumulator openai.ChatCompletionAccumulator
@@ -105,7 +102,6 @@ func (r *openAIChatStreamResponse) Candidates() []Candidate {
 	}
 
 	candidates := make([]Candidate, len(r.streamChunk.Choices))
-
 	for i, choice := range r.streamChunk.Choices {
 		candidates[i] = &openAIStreamCandidate{
 			streamChoice: choice,
@@ -116,7 +112,7 @@ func (r *openAIChatStreamResponse) Candidates() []Candidate {
 	return candidates
 }
 
-// openAIStreamCandidate implements Candidate for streamed deltas.
+// openAIStreamCandidate is a streamed choice delta.
 type openAIStreamCandidate struct {
 	streamChoice openai.ChatCompletionChunkChoice
 	content      string
@@ -137,7 +133,7 @@ func (c *openAIStreamCandidate) String() string {
 	return fmt.Sprintf("StreamingCandidate(Content: %q)", c.content)
 }
 
-// openAIStreamPart implements Part.
+// openAIStreamPart is a streamed text part.
 type openAIStreamPart struct {
 	content string
 }

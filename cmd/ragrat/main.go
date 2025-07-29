@@ -33,6 +33,7 @@ const (
 
 func main() {
 	fmt.Println()
+
 	client, err := llm.NewOpenAIClient(llm.WithBaseURL(localhost))
 	if err != nil {
 		log.Fatalf("failed to create client: %v", err)
