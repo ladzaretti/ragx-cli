@@ -34,7 +34,7 @@ const (
 func main() {
 	fmt.Println()
 
-	client, err := llm.NewOpenAIClient(llm.WithBaseURL(localhost))
+	client, err := llm.NewClient(llm.WithBaseURL(localhost))
 	if err != nil {
 		log.Fatalf("failed to create client: %v", err)
 	}
@@ -51,7 +51,7 @@ func main() {
 	if err != nil {
 		slog.Error("embedding error", "err", err)
 	} else {
-		slog.Info("embed success", "vector", embedRes.Vector())
+		slog.Info("embed success", "vector", embedRes.Vector)
 	}
 
 	embedBatchReq := llm.EmbedBatchRequest{
@@ -63,11 +63,11 @@ func main() {
 	if err != nil {
 		slog.Error("embedding error", "err", err)
 	} else {
-		slog.Info("embed success", "vectors", embedBatchRes.Vectors())
+		slog.Info("embed success", "vectors", embedBatchRes.Vectors)
 	}
 
 	// Start a new chat with a system prompt and model
-	chat := client.StartChat("You are a helpful assistant.", model)
+	chat, _ := client.NewChat("You are a helpful assistant.", model)
 
 	// Perform a single exchange
 	resp, err := chat.Send(ctx, "What's the capital of France?")
@@ -75,46 +75,29 @@ func main() {
 		log.Fatalf("chat send failed: %v", err)
 	}
 
-	// Extract and print all candidate parts
-	for _, c := range resp.Candidates() {
-		for _, part := range c.Parts() {
-			if text, ok := part.AsText(); ok {
-				fmt.Println(">>", text)
-			}
-		}
-	}
+	fmt.Println(">>", resp.Content)
 
 	stream, err := chat.SendStreaming(ctx, "Write a short poem about the sea.")
 	if err != nil {
 		log.Fatalf("streaming failed: %v", err)
 	}
-	var streamedText string
-	var llmError error
+
+	var (
+		streamedText string
+		llmError     error
+	)
 
 	for response, err := range stream {
 		if err != nil {
 			slog.Error("error reading streaming LLM response")
+
 			llmError = err
-			break
-		}
-		if response == nil {
-			break
-		}
-
-		if len(response.Candidates()) == 0 {
-			slog.Error("No candidates in response")
 
 			break
 		}
 
-		candidate := response.Candidates()[0]
-
-		for _, part := range candidate.Parts() {
-			if text, ok := part.AsText(); ok {
-				streamedText += text
-				fmt.Print(text)
-			}
-		}
+		streamedText += response.Content
+		fmt.Print(response.Content)
 	}
 
 	if err != nil {
@@ -126,14 +109,7 @@ func main() {
 		log.Fatalf("chat send failed: %v", err)
 	}
 
-	// Extract and print all candidate parts
-	for _, c := range resp.Candidates() {
-		for _, part := range c.Parts() {
-			if text, ok := part.AsText(); ok {
-				fmt.Println(">>", text)
-			}
-		}
-	}
+	fmt.Println(">>", resp.Content)
 
 	fmt.Println() // final newline
 }
