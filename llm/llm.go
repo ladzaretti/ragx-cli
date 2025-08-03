@@ -33,6 +33,7 @@ type Client struct {
 }
 
 type config struct {
+	logger  *slog.Logger
 	baseURL string
 	apiKey  string
 	model   string
@@ -62,12 +63,19 @@ func WithModel(model string) Option {
 	}
 }
 
+func WithLogger(logger *slog.Logger) Option {
+	return func(o *config) {
+		o.logger = logger
+	}
+}
+
 // NewClient creates a new OpenAI client.
 func NewClient(opts ...Option) (*Client, error) {
 	c := &config{
 		baseURL: os.Getenv("OPENAI_API_BASE"),
 		apiKey:  os.Getenv("OPENAI_API_KEY"),
 		model:   os.Getenv("OPENAI_MODEL"),
+		logger:  slog.Default(),
 	}
 
 	for _, opt := range opts {
@@ -102,8 +110,8 @@ func (c *Client) GenerateCompletion(ctx context.Context, req CompletionRequest) 
 		return "", err
 	}
 
-	slog.Info("generate completion", "model", model)
-	slog.Debug("prompt", "text", req.Prompt)
+	c.logger.Info("generate completion", "model", model)
+	c.logger.Debug("prompt", "text", req.Prompt)
 
 	completion, err := c.client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
 		Model: model,
@@ -163,7 +171,7 @@ func (c *Client) Embed(ctx context.Context, req EmbedRequest) (*EmbedResponse, e
 		Model: req.Model,
 	}
 
-	slog.Info("embed request", "model", req.Model, "input_len", len(req.Input))
+	c.logger.Info("embed request", "model", req.Model, "input_len", len(req.Input))
 
 	res, err := c.client.Embeddings.New(ctx, params)
 	if err != nil {
@@ -198,7 +206,7 @@ func (c *Client) EmbedBatch(ctx context.Context, req EmbedBatchRequest) (*EmbedB
 		Model: req.Model,
 	}
 
-	slog.Info("embed batch request", "model", req.Model, "input_count", len(req.Input))
+	c.logger.Info("embed batch request", "model", req.Model, "input_count", len(req.Input))
 
 	res, err := c.client.Embeddings.New(ctx, params)
 	if err != nil {
@@ -224,30 +232,49 @@ func (c *Client) EmbedBatch(ctx context.Context, req EmbedBatchRequest) (*EmbedB
 // Not thread safe, create a separate ChatSession per goroutine
 // or protect calls with a mutex.
 type ChatSession struct {
+	logger  *slog.Logger
 	client  openai.Client
 	history []openai.ChatCompletionMessageParamUnion
 	model   string
 }
 
+type SessionOpt func(*ChatSession)
+
+func WithSessionLogger(logger *slog.Logger) SessionOpt {
+	return func(c *ChatSession) {
+		c.logger = logger
+	}
+}
+
 // NewChat creates a new chat session with optional system prompt.
-func (c *Client) NewChat(systemPrompt, model string) (*ChatSession, error) {
+func NewChat(c *Client, systemPrompt, model string, opts ...SessionOpt) (*ChatSession, error) {
+	session := &ChatSession{
+		client: c.client,
+		logger: slog.Default(),
+	}
+
+	for _, o := range opts {
+		o(session)
+	}
+
+	logger := session.logger
+
 	model, err := c.selectModel(model)
 	if err != nil {
 		return nil, err
 	}
 
-	slog.Info("start chat session", "model", model)
+	logger.Info("start chat session", "model", model)
 
 	history := []openai.ChatCompletionMessageParamUnion{}
 	if systemPrompt != "" {
 		history = append(history, openai.SystemMessage(systemPrompt))
 	}
 
-	return &ChatSession{
-		client:  c.client,
-		history: history,
-		model:   model,
-	}, nil
+	session.history = history
+	session.model = model
+
+	return session, nil
 }
 
 // ChatResponseIterator is a streaming sequence of chat responses.
@@ -259,27 +286,40 @@ type ChatResponse struct {
 	Usage   any
 }
 
+func (s *ChatSession) selectModel(override string) (string, error) {
+	if m := cmp.Or(override, s.model); m != "" {
+		return m, nil
+	}
+
+	return "", ErrNoModelSelected
+}
+
 // Send sends user messages and returns a response.
 // The assistant's reply is appended to the internal history.
-func (s *ChatSession) Send(ctx context.Context, contents ...string) (*ChatResponse, error) {
-	slog.Info("send chat turn", "model", s.model, "history_len", len(s.history))
+func (s *ChatSession) Send(ctx context.Context, model string, contents ...string) (*ChatResponse, error) {
+	model, err := s.selectModel(model)
+	if err != nil {
+		return nil, err
+	}
+
+	s.logger.Info("send chat turn", "model", model, "history_len", len(s.history))
 
 	s.appendUserMessages(contents)
 
 	chatReq := openai.ChatCompletionNewParams{
-		Model:    s.model,
+		Model:    model,
 		Messages: s.history,
 	}
 
-	slog.Debug("chat request", "model", s.model, "message_count", len(chatReq.Messages))
+	s.logger.Debug("chat request", "model", model, "message_count", len(chatReq.Messages))
 
 	completion, err := s.client.Chat.Completions.New(ctx, chatReq)
 	if err != nil {
-		slog.Error("chat request failed", "err", err)
+		s.logger.Error("chat request failed", "err", err)
 		return nil, err
 	}
 
-	slog.Debug("chat response", "id", completion.ID, "choices", len(completion.Choices))
+	s.logger.Debug("chat response", "id", completion.ID, "choices", len(completion.Choices))
 
 	if len(completion.Choices) == 0 {
 		return nil, ErrEmptyCompletionResponse
@@ -288,7 +328,7 @@ func (s *ChatSession) Send(ctx context.Context, contents ...string) (*ChatRespon
 	msg := completion.Choices[0].Message
 	s.history = append(s.history, msg.ToParam())
 
-	slog.Info("saved assistant message", "content_present", msg.Content != "")
+	s.logger.Info("saved assistant message", "content_present", msg.Content != "")
 
 	return &ChatResponse{
 		Content: msg.Content,
@@ -298,13 +338,18 @@ func (s *ChatSession) Send(ctx context.Context, contents ...string) (*ChatRespon
 
 // SendStreaming sends user messages and returns a streaming response iterator.
 // The assistant's full reply is added to history after streaming completes.
-func (s *ChatSession) SendStreaming(ctx context.Context, contents ...string) (ChatResponseIterator, error) {
-	slog.Info("start streaming request", "model", s.model)
+func (s *ChatSession) SendStreaming(ctx context.Context, model string, contents ...string) (ChatResponseIterator, error) {
+	model, err := s.selectModel(model)
+	if err != nil {
+		return nil, err
+	}
+
+	s.logger.Info("start streaming request", "model", model)
 
 	s.appendUserMessages(contents)
 
 	req := openai.ChatCompletionNewParams{
-		Model:    s.model,
+		Model:    model,
 		Messages: s.history,
 	}
 	stream := s.client.Chat.Completions.NewStreaming(ctx, req)
@@ -341,7 +386,18 @@ func (s *ChatSession) SendStreaming(ctx context.Context, contents ...string) (Ch
 		}
 
 		if err := stream.Err(); err != nil {
+			if errors.Is(err, context.Canceled) {
+				// rollback the orphaned user prompt.
+				for i := len(s.history) - 1; i >= 0; i-- {
+					if *s.history[i].GetRole() == "user" {
+						s.history = s.history[:i]
+						break
+					}
+				}
+			}
+
 			yield(ChatResponse{}, fmt.Errorf("stream error: %w", err))
+
 			return
 		}
 
@@ -349,11 +405,6 @@ func (s *ChatSession) SendStreaming(ctx context.Context, contents ...string) (Ch
 		if content != "" {
 			param := openai.ChatCompletionMessage{Content: content, Role: "assistant"}.ToParam()
 			s.history = append(s.history, param)
-
-			yield(ChatResponse{
-				Content: content,
-				Usage:   acc.Usage,
-			}, nil)
 		}
 	}, nil
 }

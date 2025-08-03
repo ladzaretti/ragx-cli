@@ -3,113 +3,81 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"log/slog"
+	"os"
+	"path/filepath"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/ladzaretti/ragrat/llm"
+	"github.com/ladzaretti/ragrat/model"
 )
 
-const (
-	localhost = "http://localhost:11434/v1"
-	// model        = "hf.co/unsloth/DeepSeek-R1-0528-Qwen3-8B-GGUF:Q4_K_XL"
-	// model = "qwen3:8b"
-	model = "llama3.1:8b"
-	// model = "qwen2.5-coder:14b"
-	// model     = "deepseek-r1:8b"
-	embedding = "nomic-embed-text:v1.5"
-	// systemPrompt = `
-	// **Your Role and Instructions:**
-	// You are an AI assistant that answers questions using text from a provided CONTEXT and by optionally calling tools.
+const appName = "ragrat"
 
-	// - Use the CONTEXT as your primary source of truth.
-	// - If the CONTEXT does not contain enough information, you may use available tools to gather the necessary data.
-	// - Do not use your own pre-trained knowledge unless explicitly instructed to do so.
-	// - Always respond directly to the QUESTION.
-	// - If you cannot answer using the CONTEXT or tools, respond with: "The provided context does not contain the information to answer this question."
-	// `
-	systemPrompt = "You may use get_city_found_year to answer questions about a city's founding year."
-	// systemPrompt = "You are an assistant that can call tools. When calling a function, respond using the OpenAI tool_call."
-)
+func defaultLogDir() (string, error) {
+	if stateDir, ok := os.LookupEnv("XDG_STATE_HOME"); ok {
+		return filepath.Join(stateDir, appName), nil
+	}
 
-func main() {
-	fmt.Println()
-
-	client, err := llm.NewClient(llm.WithBaseURL(localhost))
+	home, err := os.UserHomeDir()
 	if err != nil {
-		log.Fatalf("failed to create client: %v", err)
-	}
-	defer client.Close()
-
-	ctx := context.Background()
-
-	embedReq := llm.EmbedRequest{
-		Model: embedding,
-		Input: "embedding this chunk",
+		return "", err
 	}
 
-	embedRes, err := client.Embed(ctx, embedReq)
+	return filepath.Join(home, ".local", "state", appName), nil
+}
+
+func defaultLogFile() (*os.File, error) {
+	logDir, err := defaultLogDir()
 	if err != nil {
-		slog.Error("embedding error", "err", err)
-	} else {
-		slog.Info("embed success", "vector", embedRes.Vector)
+		return nil, err
 	}
 
-	embedBatchReq := llm.EmbedBatchRequest{
-		Model: embedding,
-		Input: []string{"embedding this chunk - batch 1", "embedding this chunk - batch 2"},
-	}
-
-	embedBatchRes, err := client.EmbedBatch(ctx, embedBatchReq)
-	if err != nil {
-		slog.Error("embedding error", "err", err)
-	} else {
-		slog.Info("embed success", "vectors", embedBatchRes.Vectors)
-	}
-
-	// Start a new chat with a system prompt and model
-	chat, _ := client.NewChat("You are a helpful assistant.", model)
-
-	// Perform a single exchange
-	resp, err := chat.Send(ctx, "What's the capital of France?")
-	if err != nil {
-		log.Fatalf("chat send failed: %v", err)
-	}
-
-	fmt.Println(">>", resp.Content)
-
-	stream, err := chat.SendStreaming(ctx, "Write a short poem about the sea.")
-	if err != nil {
-		log.Fatalf("streaming failed: %v", err)
+	if err := os.MkdirAll(logDir, 0o750); err != nil {
+		return nil, err
 	}
 
 	var (
-		streamedText string
-		llmError     error
+		filename = filepath.Join(logDir, ".log")
+		flag     = os.O_CREATE | os.O_WRONLY | os.O_APPEND
 	)
 
-	for response, err := range stream {
-		if err != nil {
-			slog.Error("error reading streaming LLM response")
+	return os.OpenFile(filepath.Clean(filename), flag, 0o600) //nolint:gosec // internal filename
+}
 
-			llmError = err
-
-			break
-		}
-
-		streamedText += response.Content
-		fmt.Print(response.Content)
-	}
-
+func main() {
+	f, err := defaultLogFile()
 	if err != nil {
-		slog.Error("error analyzing tool calls", "err", llmError)
+		fmt.Fprintf(os.Stderr, "open ragrat log: %v\n", err)
+		os.Exit(1)
 	}
 
-	resp, err = chat.Send(ctx, "can you repeat that ?")
+	logger := slog.New(slog.NewTextHandler(f, nil))
+
+	client, err := llm.NewClient(
+		llm.WithBaseURL("http://localhost:11434/v1"),
+		llm.WithLogger(logger),
+	)
 	if err != nil {
-		log.Fatalf("chat send failed: %v", err)
+		fmt.Fprintf(os.Stderr, "llm client: %v\n", err)
+		os.Exit(1)
 	}
 
-	fmt.Println(">>", resp.Content)
+	models, err := client.ListModels(context.Background())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "llm list models: %v\n", err)
+		os.Exit(1)
+	}
 
-	fmt.Println() // final newline
+	session, err := llm.NewChat(client, "", models[0], llm.WithSessionLogger(logger))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "llm session: %v\n", err)
+		os.Exit(1)
+	}
+
+	p := tea.NewProgram(model.New(session, models), tea.WithAltScreen())
+	if _, err := p.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "ragrat-tui: %v\n", err)
+		os.Exit(1)
+	}
 }
