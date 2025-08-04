@@ -315,7 +315,12 @@ func (s *ChatSession) Send(ctx context.Context, model string, contents ...string
 
 	completion, err := s.client.Chat.Completions.New(ctx, chatReq)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			s.removeLastUserMessage()
+		}
+
 		s.logger.Error("chat request failed", "err", err)
+
 		return nil, err
 	}
 
@@ -387,13 +392,7 @@ func (s *ChatSession) SendStreaming(ctx context.Context, model string, contents 
 
 		if err := stream.Err(); err != nil {
 			if errors.Is(err, context.Canceled) {
-				// rollback the orphaned user prompt.
-				for i := len(s.history) - 1; i >= 0; i-- {
-					if *s.history[i].GetRole() == "user" {
-						s.history = s.history[:i]
-						break
-					}
-				}
+				s.removeLastUserMessage()
 			}
 
 			yield(ChatResponse{}, fmt.Errorf("stream error: %w", err))
@@ -413,6 +412,15 @@ func (s *ChatSession) SendStreaming(ctx context.Context, model string, contents 
 func (s *ChatSession) appendUserMessages(msgs []string) {
 	for _, msg := range msgs {
 		s.history = append(s.history, openai.UserMessage(msg))
+	}
+}
+
+func (s *ChatSession) removeLastUserMessage() {
+	for i := len(s.history) - 1; i >= 0; i-- {
+		if s.history[i].OfUser != nil {
+			s.history = s.history[:i]
+			return
+		}
 	}
 }
 

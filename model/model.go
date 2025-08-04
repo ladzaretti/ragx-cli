@@ -24,7 +24,6 @@ const (
 
 var (
 	// https://catppuccin.com/palette/
-	mochaBase     = "#1e1e2e"
 	mochaMantle   = "#181825"
 	mochaCrust    = "#11111b"
 	mochaSurface0 = "#313244"
@@ -49,7 +48,7 @@ var (
 				Bold(true).
 				Padding(0, 1)
 
-	// Status bar
+	// status bar related style.
 
 	chipStyle = lipgloss.NewStyle().
 			Background(lipgloss.Color(mochaGreen)).
@@ -64,7 +63,7 @@ var (
 	barStyle = lipgloss.NewStyle().
 			Background(lipgloss.Color(mochaMantle)).
 			Foreground(lipgloss.Color(mochaText)).
-			Padding(0, 1).
+			Padding(0, 0).
 			BorderTop(true).
 			BorderForeground(lipgloss.Color(mochaSurface0))
 
@@ -387,6 +386,9 @@ func (m *model) handleTextarea(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 		return m, nil
 
+	// FIXME: rebind, collides with ^L which clears terminal.
+	//
+	// TODO: rethink key bindings overall.
 	case "ctrl+l":
 		m.currentFocus = focusModelList
 
