@@ -24,18 +24,24 @@ const (
 
 var (
 	// https://catppuccin.com/palette/
-	mochaMantle   = "#181825"
+
+	// Base/background layers
 	mochaCrust    = "#11111b"
+	mochaMantle   = "#181825"
 	mochaSurface0 = "#313244"
 
+	// Text and UI detail
 	mochaText     = "#cdd6f4"
 	mochaSubtext0 = "#a6adc8"
 	mochaOverlay2 = "#9399b2"
 
+	// Semantic accent colors
+	mochaRed      = "#f38ba8"
 	mochaGreen    = "#a6e3a1"
+	mochaYellow   = "#f9e2af"
+	mochaBlue     = "#89b4fa"
 	mochaMauve    = "#cba6f7"
 	mochaLavender = "#b4befe"
-	mochaRed      = "#f38ba8"
 
 	keyStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color(mochaSubtext0)).Bold(true)
 	dimStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color(mochaOverlay2))
@@ -50,10 +56,31 @@ var (
 
 	// status bar related style.
 
-	chipStyle = lipgloss.NewStyle().
+	insertChipStyle = lipgloss.NewStyle().
 			Background(lipgloss.Color(mochaGreen)).
 			Foreground(lipgloss.Color(mochaCrust)).
 			Bold(true).Padding(0, 1)
+
+	leaderChipStyle = lipgloss.NewStyle().
+			Background(lipgloss.Color(mochaMauve)).
+			Foreground(lipgloss.Color(mochaCrust)).
+			Bold(true).Padding(0, 1)
+
+	historyChipStyle = lipgloss.NewStyle().
+				Background(lipgloss.Color(mochaBlue)). // pick your preferred color
+				Foreground(lipgloss.Color(mochaCrust)).
+				Bold(true).Padding(0, 1)
+
+	modelsChipStyle = lipgloss.NewStyle().
+			Background(lipgloss.Color(mochaYellow)). // or mochaLavender
+			Foreground(lipgloss.Color(mochaCrust)).
+			Bold(true).Padding(0, 1)
+
+	defaultChipStyle = lipgloss.NewStyle().
+				Background(lipgloss.Color(mochaSurface0)).
+				Foreground(lipgloss.Color(mochaText)).
+				Bold(true).
+				Padding(0, 1)
 
 	errorChipStyle = lipgloss.NewStyle().
 			Background(lipgloss.Color(mochaRed)).
@@ -66,19 +93,6 @@ var (
 			Padding(0, 0).
 			BorderTop(true).
 			BorderForeground(lipgloss.Color(mochaSurface0))
-
-	divider = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(mochaOverlay2)).
-		Render(" • ")
-
-	legend = lipgloss.JoinHorizontal(lipgloss.Left,
-		keyStyle.Render("▲/k ▼/j"), dimStyle.Render(" scroll"), divider,
-		keyStyle.Render("^S"), dimStyle.Render(" send"), divider,
-		keyStyle.Render("^L"), dimStyle.Render(" focus list"), divider,
-		keyStyle.Render("^G"), dimStyle.Render(" focus history"), divider,
-		keyStyle.Render("esc"), dimStyle.Render(" cancel "), divider,
-		keyStyle.Render("^C"), dimStyle.Render(" quit"),
-	)
 )
 
 // listItem wraps a model name so it can satisfy list.Item.
@@ -118,6 +132,39 @@ func (simpleDelegate) Render(w io.Writer, m list.Model, index int, it list.Item)
 	_, _ = fmt.Fprint(w, style.Render(prefix+name))
 }
 
+// model is the bubbletea model that drives the chat interface.
+type model struct {
+	// ui components
+
+	viewport  viewport.Model
+	textarea  textarea.Model
+	spinner   spinner.Model
+	modelList list.Model
+
+	// chat session
+
+	chat           *llm.ChatSession
+	selectedModel  string
+	historyBuilder strings.Builder
+
+	// focus management
+	currentFocus focus
+	leaderActive bool
+
+	// state
+
+	loading bool
+	cancel  context.CancelFunc // cancel for the in-flight LLM request
+	lastErr string             // shown in footer when non-empty
+
+	// layout
+
+	width         int
+	listWidth     int
+	legendHeight  int
+	legendWrapped string
+}
+
 // focus is the current component in focus.
 type focus int
 
@@ -135,39 +182,37 @@ func (f focus) String() string {
 	case focusModelList:
 		return "models"
 	case focusTextarea:
-		return "input"
+		return "insert"
 	default:
 	}
 
 	return ""
 }
 
-// model is the bubbletea model that drives the chat interface.
-type model struct {
-	viewport viewport.Model
-	textarea textarea.Model
-	spinner  spinner.Model
+func (f focus) style() lipgloss.Style {
+	switch f {
+	case focusTextarea:
+		return insertChipStyle
+	case focusViewport:
+		return historyChipStyle
+	case focusModelList:
+		return modelsChipStyle
+	default:
+		return defaultChipStyle
+	}
+}
 
-	chat *llm.ChatSession
+func (m *model) focus(f focus) {
+	m.currentFocus = f
 
-	historyBuilder strings.Builder
+	m.refreshLegend()
 
-	loading bool
+	if f == focusTextarea {
+		m.textarea.Focus()
+		return
+	}
 
-	modelList     list.Model
-	selectedModel string
-	listWidth     int
-
-	legendWrapped string
-	legendHeight  int
-
-	currentFocus focus
-
-	// cancel for the in flight LLM request.
-	cancel context.CancelFunc
-
-	// lastErr shown in footer when non-empty.
-	lastErr string
+	m.textarea.Blur()
 }
 
 // New creates a new [model].
@@ -222,7 +267,6 @@ func New(chat *llm.ChatSession, models []string) *model {
 		textarea:      ta,
 		spinner:       sp,
 		selectedModel: models[0],
-		legendWrapped: legend,
 		legendHeight:  1,
 		currentFocus:  focusTextarea,
 	}
@@ -236,6 +280,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKey(msg)
 
 	case tea.WindowSizeMsg:
+		m.width = msg.Width
 		return m.resize(msg)
 
 	case spinner.TickMsg:
@@ -314,7 +359,50 @@ func (m *model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "ctrl+c":
 		return m, tea.Quit
 
+	case "ctrl+a":
+		m.leaderActive = !m.leaderActive
+
+		m.refreshLegend()
+
+		if m.leaderActive {
+			m.legendWrapped = lipgloss.NewStyle().Width(m.width).Render(m.legend())
+			m.textarea.Blur()
+
+			return m, nil
+		}
+
+		m.focus(focusTextarea)
+
+		return m, textinput.Blink
+
+	case "esc": //nolint:goconst
+		if m.leaderActive {
+			m.leaderActive = false
+
+			m.refreshLegend()
+			m.focus(focusTextarea)
+
+			return m, textinput.Blink
+		}
+
+	case "ctrl+s":
+		if m.loading {
+			return m, nil
+		}
+
+		prompt := strings.TrimSpace(m.textarea.Value())
+		if prompt == "" {
+			return m, nil
+		}
+
+		return m.sendPrompt(prompt)
+
 	default:
+	}
+
+	if m.leaderActive {
+		m.refreshLegend()
+		return m.handleLeaderKey(k.String())
 	}
 
 	switch m.currentFocus {
@@ -330,13 +418,87 @@ func (m *model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *model) handleViewport(k tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch k.String() {
-	case "esc", "ctrl+g": //nolint:goconst
-		m.currentFocus = focusTextarea
-		m.textarea.Focus()
+func (m *model) legend() string {
+	divider := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(mochaOverlay2)).
+		Render(" • ")
+
+	if m.leaderActive {
+		return lipgloss.JoinHorizontal(lipgloss.Left,
+			keyStyle.Render("h"), dimStyle.Render(" history"), divider,
+			keyStyle.Render("m"), dimStyle.Render(" change model"), divider,
+			keyStyle.Render("l"), dimStyle.Render(" clear chat"), divider,
+			keyStyle.Render("q"), dimStyle.Render(" quit"), divider,
+			keyStyle.Render("esc"), dimStyle.Render(" cancel leader"),
+		)
+	}
+
+	if m.currentFocus == focusModelList {
+		return lipgloss.JoinHorizontal(lipgloss.Left,
+			keyStyle.Render("▲/k ▼/j"), dimStyle.Render(" scroll"), divider,
+			keyStyle.Render("enter"), dimStyle.Render(" select model"), divider,
+			keyStyle.Render("esc"), dimStyle.Render(" cancel"),
+		)
+	}
+
+	if m.currentFocus == focusViewport {
+		return lipgloss.JoinHorizontal(lipgloss.Left,
+			keyStyle.Render("▲/k ▼/j"), dimStyle.Render(" scroll"), divider,
+			keyStyle.Render("esc"), dimStyle.Render(" back"),
+		)
+	}
+
+	return lipgloss.JoinHorizontal(lipgloss.Left,
+		keyStyle.Render("^S"), dimStyle.Render(" send"), divider,
+		keyStyle.Render("esc"), dimStyle.Render(" cancel"), divider,
+		keyStyle.Render("^A"), dimStyle.Render(" leader mode"), divider,
+		keyStyle.Render("^C"), dimStyle.Render(" quit"),
+	)
+}
+
+func (m *model) refreshLegend() {
+	m.legendWrapped = lipgloss.NewStyle().
+		Width(m.width).
+		Render(m.legend())
+}
+
+//nolint:unparam
+var leaderMap = map[string]func(*model) (tea.Model, tea.Cmd){
+	"q": func(m *model) (tea.Model, tea.Cmd) { return m, tea.Quit },
+	"h": func(m *model) (tea.Model, tea.Cmd) { m.focus(focusViewport); return m, nil },
+	"m": func(m *model) (tea.Model, tea.Cmd) { m.focus(focusModelList); return m, nil },
+	"l": func(m *model) (tea.Model, tea.Cmd) {
+		m.historyBuilder = strings.Builder{}
+		m.viewport.SetContent("")
+		m.focus(focusTextarea)
+		return m, textinput.Blink
+	},
+}
+
+func (m *model) handleLeaderKey(k string) (tea.Model, tea.Cmd) {
+	m.leaderActive = false
+	if f, ok := leaderMap[k]; ok {
+		return f(m)
+	}
+
+	// Unknown leader key — return to textarea
+	if m.currentFocus == focusTextarea {
+		m.focus(focusTextarea)
 
 		return m, textinput.Blink
+	}
+
+	return m, nil
+}
+
+func (m *model) handleViewport(k tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch k.String() {
+	case "esc":
+		m.focus(focusTextarea)
+
+		return m, textinput.Blink
+
+	default:
 	}
 
 	var cmd tea.Cmd
@@ -348,14 +510,12 @@ func (m *model) handleViewport(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m *model) handleModelList(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch k.String() {
-	case "esc", "ctrl+l", "enter":
+	case "esc", "enter":
 		if it, ok := m.modelList.SelectedItem().(listItem); ok {
 			m.selectedModel = string(it)
 		}
 
-		m.currentFocus = focusTextarea
-
-		m.textarea.Focus()
+		m.focus(focusTextarea)
 
 		return m, textinput.Blink
 	}
@@ -379,34 +539,7 @@ func (m *model) handleTextarea(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 		return m, nil
 
-	case "ctrl+g":
-		m.currentFocus = focusViewport
-
-		m.textarea.Blur()
-
-		return m, nil
-
-	// FIXME: rebind, collides with ^L which clears terminal.
-	//
-	// TODO: rethink key bindings overall.
-	case "ctrl+l":
-		m.currentFocus = focusModelList
-
-		m.textarea.Blur()
-
-		return m, nil
-
-	case "ctrl+s":
-		if m.loading {
-			return m, nil
-		}
-
-		prompt := strings.TrimSpace(m.textarea.Value())
-		if prompt == "" {
-			return m, nil
-		}
-
-		return m.sendPrompt(prompt)
+	default:
 	}
 
 	var cmd tea.Cmd
@@ -491,7 +624,8 @@ func (m *model) resize(w tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	m.textarea.SetWidth(vpWidth)
 	m.textarea.SetHeight(textareaHight)
 
-	m.legendWrapped = lipgloss.NewStyle().Width(w.Width).Render(legend)
+	m.refreshLegend()
+
 	m.legendHeight = lipgloss.Height(m.legendWrapped)
 
 	availHeight := w.Height - m.textarea.Height() - m.legendHeight - extraLines
@@ -508,7 +642,16 @@ func (m *model) resize(w tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 
 func (m *model) View() string {
 	mainArea := lipgloss.JoinHorizontal(lipgloss.Top, m.viewport.View(), m.modelList.View())
-	footerContent := lipgloss.JoinHorizontal(lipgloss.Left, chipStyle.Render(m.currentFocus.String()))
+
+	modeLabel, chipStyle := m.currentFocus.String(), m.currentFocus.style()
+	if m.leaderActive {
+		modeLabel, chipStyle = "leader", leaderChipStyle
+	}
+
+	footerContent := lipgloss.JoinHorizontal(
+		lipgloss.Left,
+		chipStyle.Render(modeLabel),
+	)
 
 	if m.lastErr != "" {
 		footerContent = lipgloss.JoinHorizontal(lipgloss.Left, footerContent, errorChipStyle.Render(m.lastErr))
