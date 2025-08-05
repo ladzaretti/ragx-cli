@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/ladzaretti/ragrat/config"
 	"github.com/ladzaretti/ragrat/llm"
 	"github.com/ladzaretti/ragrat/model"
 )
@@ -51,6 +52,8 @@ func main() {
 		fmt.Fprintf(os.Stderr, "open ragrat log: %v\n", err)
 		os.Exit(1)
 	}
+
+	fmt.Fprint(f, config.GenerateDefault())
 
 	logger := slog.New(slog.NewTextHandler(f, nil))
 

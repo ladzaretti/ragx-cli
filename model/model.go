@@ -56,36 +56,36 @@ var (
 
 	// status bar related style.
 
-	insertChipStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color(mochaGreen)).
-			Foreground(lipgloss.Color(mochaCrust)).
-			Bold(true).Padding(0, 1)
+	insertStatusStyle = lipgloss.NewStyle().
+				Background(lipgloss.Color(mochaGreen)).
+				Foreground(lipgloss.Color(mochaCrust)).
+				Bold(true).Padding(0, 1)
 
-	leaderChipStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color(mochaMauve)).
-			Foreground(lipgloss.Color(mochaCrust)).
-			Bold(true).Padding(0, 1)
+	leaderStatusStyle = lipgloss.NewStyle().
+				Background(lipgloss.Color(mochaMauve)).
+				Foreground(lipgloss.Color(mochaCrust)).
+				Bold(true).Padding(0, 1)
 
-	historyChipStyle = lipgloss.NewStyle().
+	historyStatusStyle = lipgloss.NewStyle().
 				Background(lipgloss.Color(mochaBlue)). // pick your preferred color
 				Foreground(lipgloss.Color(mochaCrust)).
 				Bold(true).Padding(0, 1)
 
-	modelsChipStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color(mochaYellow)). // or mochaLavender
-			Foreground(lipgloss.Color(mochaCrust)).
-			Bold(true).Padding(0, 1)
+	modelsStatusStyle = lipgloss.NewStyle().
+				Background(lipgloss.Color(mochaYellow)). // or mochaLavender
+				Foreground(lipgloss.Color(mochaCrust)).
+				Bold(true).Padding(0, 1)
 
-	defaultChipStyle = lipgloss.NewStyle().
+	defaultStatusStyle = lipgloss.NewStyle().
 				Background(lipgloss.Color(mochaSurface0)).
 				Foreground(lipgloss.Color(mochaText)).
 				Bold(true).
 				Padding(0, 1)
 
-	errorChipStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color(mochaRed)).
-			Foreground(lipgloss.Color(mochaCrust)).
-			Bold(true).Padding(0, 1)
+	errorStatusStyle = lipgloss.NewStyle().
+				Background(lipgloss.Color(mochaRed)).
+				Foreground(lipgloss.Color(mochaCrust)).
+				Bold(true).Padding(0, 1)
 
 	barStyle = lipgloss.NewStyle().
 			Background(lipgloss.Color(mochaMantle)).
@@ -192,13 +192,13 @@ func (f focus) String() string {
 func (f focus) style() lipgloss.Style {
 	switch f {
 	case focusTextarea:
-		return insertChipStyle
+		return insertStatusStyle
 	case focusViewport:
-		return historyChipStyle
+		return historyStatusStyle
 	case focusModelList:
-		return modelsChipStyle
+		return modelsStatusStyle
 	default:
-		return defaultChipStyle
+		return defaultStatusStyle
 	}
 }
 
@@ -249,7 +249,7 @@ func New(chat *llm.ChatSession, models []string) *model {
 	lw := max(listWidth, min(longest+2, 40))
 
 	lm := list.New(items, simpleDelegate{}, lw, 10)
-	lm.Title = "Models"
+	lm.Title = "MODEL SELECT"
 	lm.SetFilteringEnabled(false)
 	lm.SetShowStatusBar(false)
 	lm.SetShowHelp(false)
@@ -423,37 +423,44 @@ func (m *model) legend() string {
 		Foreground(lipgloss.Color(mochaOverlay2)).
 		Render(" • ")
 
-	if m.leaderActive {
+	legendItem := func(k, label string) string {
 		return lipgloss.JoinHorizontal(lipgloss.Left,
-			keyStyle.Render("h"), dimStyle.Render(" history"), divider,
-			keyStyle.Render("m"), dimStyle.Render(" change model"), divider,
-			keyStyle.Render("l"), dimStyle.Render(" clear chat"), divider,
-			keyStyle.Render("q"), dimStyle.Render(" quit"), divider,
-			keyStyle.Render("esc"), dimStyle.Render(" cancel leader"),
+			keyStyle.Render(k),
+			dimStyle.Render(" "+label),
 		)
 	}
 
-	if m.currentFocus == focusModelList {
+	switch {
+	case m.leaderActive:
 		return lipgloss.JoinHorizontal(lipgloss.Left,
-			keyStyle.Render("▲/k ▼/j"), dimStyle.Render(" scroll"), divider,
-			keyStyle.Render("enter"), dimStyle.Render(" select model"), divider,
-			keyStyle.Render("esc"), dimStyle.Render(" cancel"),
+			legendItem("H", "HISTORY"), divider,
+			legendItem("M", "CHANGE MODEL"), divider,
+			legendItem("L", "CLEAR CHAT"), divider,
+			legendItem("Q", "QUIT"), divider,
+			legendItem("ESC", "CANCEL LEADER"),
+		)
+
+	case m.currentFocus == focusModelList:
+		return lipgloss.JoinHorizontal(lipgloss.Left,
+			legendItem("▲/K ▼/J", "SCROLL"), divider,
+			legendItem("ENTER", "SELECT MODEL"), divider,
+			legendItem("ESC", "CANCEL"),
+		)
+
+	case m.currentFocus == focusViewport:
+		return lipgloss.JoinHorizontal(lipgloss.Left,
+			legendItem("▲/K ▼/J", "SCROLL"), divider,
+			legendItem("ESC", "BACK"),
+		)
+
+	default:
+		return lipgloss.JoinHorizontal(lipgloss.Left,
+			legendItem("^S", "SEND"), divider,
+			legendItem("ESC", "CANCEL"), divider,
+			legendItem("^A", "LEADER MODE"), divider,
+			legendItem("^C", "QUIT"),
 		)
 	}
-
-	if m.currentFocus == focusViewport {
-		return lipgloss.JoinHorizontal(lipgloss.Left,
-			keyStyle.Render("▲/k ▼/j"), dimStyle.Render(" scroll"), divider,
-			keyStyle.Render("esc"), dimStyle.Render(" back"),
-		)
-	}
-
-	return lipgloss.JoinHorizontal(lipgloss.Left,
-		keyStyle.Render("^S"), dimStyle.Render(" send"), divider,
-		keyStyle.Render("esc"), dimStyle.Render(" cancel"), divider,
-		keyStyle.Render("^A"), dimStyle.Render(" leader mode"), divider,
-		keyStyle.Render("^C"), dimStyle.Render(" quit"),
-	)
 }
 
 func (m *model) refreshLegend() {
@@ -643,18 +650,18 @@ func (m *model) resize(w tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 func (m *model) View() string {
 	mainArea := lipgloss.JoinHorizontal(lipgloss.Top, m.viewport.View(), m.modelList.View())
 
-	modeLabel, chipStyle := m.currentFocus.String(), m.currentFocus.style()
+	modeLabel, legendItemStyle := m.currentFocus.String(), m.currentFocus.style()
 	if m.leaderActive {
-		modeLabel, chipStyle = "leader", leaderChipStyle
+		modeLabel, legendItemStyle = "leader", leaderStatusStyle
 	}
 
 	footerContent := lipgloss.JoinHorizontal(
 		lipgloss.Left,
-		chipStyle.Render(modeLabel),
+		legendItemStyle.Render(strings.ToUpper(modeLabel)),
 	)
 
 	if m.lastErr != "" {
-		footerContent = lipgloss.JoinHorizontal(lipgloss.Left, footerContent, errorChipStyle.Render(m.lastErr))
+		footerContent = lipgloss.JoinHorizontal(lipgloss.Left, footerContent, errorStatusStyle.Render(m.lastErr))
 	}
 
 	status := barStyle.Width(m.viewport.Width + m.modelList.Width()).Render(footerContent)
