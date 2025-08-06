@@ -1,4 +1,4 @@
-package config
+package cli
 
 import (
 	"cmp"
@@ -13,18 +13,14 @@ import (
 )
 
 const (
-	appName           = "ragrat"
-	defaultConfigName = ".ragrat.toml"
-
-	defaultTemperature = 0.7
-	defaultMaxContext  = 2048
-
-	defaultChunkSize = 500
-	defaultTopK      = 4
-
-	defaultLogFilename = ".log"
-
+	appName                  = "ragrat"
 	envConfigPathKeyOverride = "RAGRAT_CONFIG_PATH"
+	defaultBaseURL           = "http://localhost:11434"
+	defaultConfigName        = ".ragrat.toml"
+	defaultLogFilename       = ".log"
+	defaultTemperature       = 0.7
+	defaultChunkSize         = 500
+	defaultTopK              = 4
 )
 
 type ConfigError struct {
@@ -33,12 +29,12 @@ type ConfigError struct {
 }
 
 func (e *ConfigError) Error() string {
-	return "config: " + strings.Join([]string{e.Opt, e.Err.Error()}, ":")
+	return "config: " + strings.Join([]string{e.Opt, e.Err.Error()}, ": ")
 }
 
 func (e *ConfigError) Unwrap() error { return e.Err }
 
-type FileConfig struct {
+type Config struct {
 	LLM       LLMConfig        `toml:"llm" json:"llm"`
 	Prompt    *PromptConfig    `toml:"prompt,omitempty" json:"prompt,omitempty"`
 	Retrieval *RetrievalConfig `toml:"retrieval,omitempty" json:"retrieval,omitempty"`
@@ -53,7 +49,6 @@ type LLMConfig struct {
 	Model          string  `toml:"model,commented" comment:"Default model to use" json:"model"`
 	EmbeddingModel string  `toml:"embedding_model" comment:"Model used for embeddings" json:"embedding_model,omitempty"`
 	Temperature    float64 `toml:"temperature,commented" comment:"Completion temperature" json:"temperature,omitempty"`
-	MaxContext     int     `toml:"max_context_tokens,commented" comment:"Max context window in tokens" json:"max_context_tokens,omitempty"`
 }
 
 type PromptConfig struct {
@@ -70,8 +65,8 @@ type LoggingConfig struct {
 	Filename string `toml:"log_filename,commented" comment:"Filename for the log file" json:"log_file,omitempty"`
 }
 
-func newFileConfig() *FileConfig {
-	return &FileConfig{
+func newFileConfig() *Config {
+	return &Config{
 		LLM:       LLMConfig{},
 		Prompt:    &PromptConfig{},
 		Retrieval: &RetrievalConfig{},
@@ -79,12 +74,12 @@ func newFileConfig() *FileConfig {
 	}
 }
 
-func (c *FileConfig) ConfigPath() (string, bool) {
+func (c *Config) ConfigPath() (string, bool) {
 	return c.path, c.path != ""
 }
 
 // setDefaults fills zero-valued optional fields.
-func (c *FileConfig) setDefaults() error {
+func (c *Config) setDefaults() error {
 	if c == nil {
 		return &ConfigError{Err: errors.New("cannot set defaults on nil FileConfig")}
 	}
@@ -97,8 +92,8 @@ func (c *FileConfig) setDefaults() error {
 	c.Logging.Dir = cmp.Or(c.Logging.Dir, dir)
 	c.Logging.Filename = cmp.Or(c.Logging.Filename, defaultLogFilename)
 
+	c.LLM.BaseURL = cmp.Or(c.LLM.BaseURL, string(defaultBaseURL))
 	c.LLM.Temperature = cmp.Or(c.LLM.Temperature, defaultTemperature)
-	c.LLM.MaxContext = cmp.Or(c.LLM.MaxContext, defaultMaxContext)
 
 	c.Retrieval.ChunkSize = cmp.Or(c.Retrieval.ChunkSize, defaultChunkSize)
 	c.Retrieval.TopK = cmp.Or(c.Retrieval.TopK, defaultTopK)
@@ -106,7 +101,7 @@ func (c *FileConfig) setDefaults() error {
 	return nil
 }
 
-func (c *FileConfig) validate() error {
+func (c *Config) validate() error {
 	if c == nil {
 		return &ConfigError{Err: errors.New("cannot validate a nil config")}
 	}
@@ -115,16 +110,8 @@ func (c *FileConfig) validate() error {
 		return &ConfigError{Opt: "llm.base_url", Err: errors.New("must be set")}
 	}
 
-	if c.LLM.Model == "" {
-		return &ConfigError{Opt: "llm.model", Err: errors.New("must be set")}
-	}
-
 	if c.LLM.Temperature < 0 || c.LLM.Temperature > 2 {
 		return &ConfigError{Opt: "llm.temperature", Err: errors.New("must be between 0 and 2")}
-	}
-
-	if c.LLM.MaxContext < 0 {
-		return &ConfigError{Opt: "llm.max_context_tokens", Err: errors.New("must be zero or positive")}
 	}
 
 	if strings.Contains(c.Logging.Filename, "/") {
@@ -145,7 +132,7 @@ func (c *FileConfig) validate() error {
 }
 
 // LoadFileConfig loads the config from the given or default path.
-func LoadFileConfig(path string) (*FileConfig, error) {
+func LoadFileConfig(path string) (*Config, error) {
 	defaultPath, err := defaultConfigPath()
 	if err != nil {
 		return nil, err
@@ -227,7 +214,7 @@ func defaultConfigPath() (string, error) {
 	return filepath.Join(home, defaultConfigName), nil
 }
 
-func parseFileConfig(path string) (*FileConfig, error) {
+func parseFileConfig(path string) (*Config, error) {
 	if _, err := os.Stat(path); err != nil {
 		return nil, fmt.Errorf("config: stat file: %w", err)
 	}
