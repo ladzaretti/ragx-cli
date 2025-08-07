@@ -12,17 +12,6 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
-const (
-	appName                  = "ragrat"
-	envConfigPathKeyOverride = "RAGRAT_CONFIG_PATH"
-	defaultBaseURL           = "http://localhost:11434"
-	defaultConfigName        = ".ragrat.toml"
-	defaultLogFilename       = ".log"
-	defaultTemperature       = 0.7
-	defaultChunkSize         = 500
-	defaultTopK              = 4
-)
-
 type ConfigError struct {
 	Opt string
 	Err error
@@ -35,34 +24,35 @@ func (e *ConfigError) Error() string {
 func (e *ConfigError) Unwrap() error { return e.Err }
 
 type Config struct {
-	LLM       LLMConfig        `toml:"llm" json:"llm"`
-	Prompt    *PromptConfig    `toml:"prompt,omitempty" json:"prompt,omitempty"`
-	Retrieval *RetrievalConfig `toml:"retrieval,omitempty" json:"retrieval,omitempty"`
-	Logging   *LoggingConfig   `toml:"logging,commented" json:"logging,omitempty"`
+	LLM       LLMConfig        `json:"llm"                 toml:"llm"`
+	Prompt    *PromptConfig    `json:"prompt,omitempty"    toml:"prompt,omitempty"`
+	Retrieval *RetrievalConfig `json:"retrieval,omitempty" toml:"retrieval,omitempty"`
+	Logging   *LoggingConfig   `json:"logging,omitempty"   toml:"logging,commented"`
 
 	path string // path to the loaded config file. Empty if no config file was used.
 }
 
 type LLMConfig struct {
-	BaseURL        string  `toml:"base_url" comment:"Base URL for the LLM server (e.g., Ollama, OpenAI-compatible)" json:"base_url"`
-	APIKey         string  `toml:"api_key,commented" comment:"Optional API key if required" json:"api_key,omitempty"`
-	Model          string  `toml:"model,commented" comment:"Default model to use" json:"model"`
-	EmbeddingModel string  `toml:"embedding_model" comment:"Model used for embeddings" json:"embedding_model,omitempty"`
-	Temperature    float64 `toml:"temperature,commented" comment:"Completion temperature" json:"temperature,omitempty"`
+	BaseURL        string  `json:"base_url"                  toml:"base_url"              comment:"Base URL for the LLM server (e.g., Ollama, OpenAI-compatible)"`
+	APIKey         string  `json:"api_key,omitempty"         toml:"api_key,commented"     comment:"Optional API key if required"`
+	Model          string  `json:"model"                     toml:"model,commented"       comment:"Default model to use"`
+	EmbeddingModel string  `json:"embedding_model,omitempty" toml:"embedding_model"       comment:"Model used for embeddings"`
+	Temperature    float64 `json:"temperature,omitempty"     toml:"temperature,commented" comment:"Completion temperature"`
 }
 
 type PromptConfig struct {
-	System string `toml:"system_prompt,commented" comment:"System prompt to override the default assistant behavior" json:"system_prompt,omitempty"`
+	System string `json:"system_prompt,omitempty" toml:"system_prompt,commented" comment:"System prompt to override the default assistant behavior"`
 }
 
 type RetrievalConfig struct {
-	ChunkSize int `toml:"chunk_size,commented" comment:"Number of characters per chunk" json:"chunk_size,omitempty"`
-	TopK      int `toml:"top_k,commented" comment:"Number of chunks to retrieve during RAG" json:"top_k,omitempty"`
+	ChunkSize int `json:"chunk_size,omitempty" toml:"chunk_size,commented" comment:"Number of characters per chunk"`
+	TopK      int `json:"top_k,omitempty"      toml:"top_k,commented"      comment:"Number of chunks to retrieve during RAG"`
 }
 
 type LoggingConfig struct {
-	Dir      string `toml:"log_dir,commented" comment:"Directory where log file will be stored (default: XDG_STATE_HOME or ~/.local/state/ragrat)" json:"log_dir,omitempty"`
-	Filename string `toml:"log_filename,commented" comment:"Filename for the log file" json:"log_file,omitempty"`
+	Dir      string `json:"log_dir,omitempty"   toml:"log_dir,commented"      comment:"Directory where log file will be stored (default: XDG_STATE_HOME or ~/.local/state/ragrat)"`
+	Filename string `json:"log_file,omitempty"  toml:"log_filename,commented" comment:"Filename for the log file"`
+	Level    string `json:"log_level,omitempty" toml:"log_level,commented"    comment:"Log level: debug, info, warn, error"`
 }
 
 func newFileConfig() *Config {
@@ -91,6 +81,7 @@ func (c *Config) setDefaults() error {
 
 	c.Logging.Dir = cmp.Or(c.Logging.Dir, dir)
 	c.Logging.Filename = cmp.Or(c.Logging.Filename, defaultLogFilename)
+	c.Logging.Level = cmp.Or(c.Logging.Level, defaultLogLevel)
 
 	c.LLM.BaseURL = cmp.Or(c.LLM.BaseURL, string(defaultBaseURL))
 	c.LLM.Temperature = cmp.Or(c.LLM.Temperature, defaultTemperature)
@@ -175,7 +166,7 @@ func GenerateDefault() string {
 	return string(out)
 }
 
-func OpenLogFile(dir string, name string) (*os.File, error) {
+func openLogFile(dir, name string) (*os.File, error) {
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return nil, err
 	}

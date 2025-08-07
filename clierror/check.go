@@ -22,9 +22,6 @@ var (
 	// fprintf is the function used to format and print errors.
 	fprintf = fmt.Fprintf
 
-	// debugMode enables always printing raw error values.
-	debugMode bool
-
 	// name is the name of the root cli command in use.
 	name string
 )
@@ -59,13 +56,6 @@ func SetName(s string) {
 	name = s
 }
 
-// DebugMode sets whether debug logging is enabled.
-//
-// When enabled, raw error values are printed to stderr.
-func DebugMode(enabled bool) {
-	debugMode = enabled
-}
-
 // FatalErrHandler prints the message provided and then exits with the given code.
 func FatalErrHandler(msg string, code int) {
 	printError(msg)
@@ -91,14 +81,6 @@ func printError(msg string) {
 	_, _ = fprintf(errWriter, msg)
 }
 
-func debugPrint(err error) {
-	if !debugMode {
-		return
-	}
-
-	_, _ = fprintf(errWriter, "DEBUG %+v\n", err)
-}
-
 // ErrExit may be passed to CheckError to instruct it to output nothing but exit with
 // status code 1.
 var ErrExit = errors.New("exit")
@@ -116,8 +98,6 @@ func check(err error, handleErr func(string, int)) {
 	if err == nil {
 		return
 	}
-
-	debugPrint(err)
 
 	switch {
 	case errors.Is(err, ErrExit):

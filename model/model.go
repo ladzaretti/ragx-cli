@@ -216,7 +216,7 @@ func (m *model) focus(f focus) {
 }
 
 // New creates a new [model].
-func New(chat *llm.ChatSession, models []string) *model {
+func New(chat *llm.ChatSession, models []string, selectedModel string) *model {
 	ta := textarea.New()
 	ta.Placeholder = "Ask anything\n(Press Ctrl+S to submit)"
 	ta.Focus()
@@ -237,9 +237,14 @@ func New(chat *llm.ChatSession, models []string) *model {
 	items := make([]list.Item, 0, len(models))
 	longest := 0
 
-	for _, m := range models {
+	selectedIndex := 0
+	for i, m := range models {
 		if l := lipgloss.Width(m); l > longest {
 			longest = l
+		}
+
+		if m == selectedModel {
+			selectedIndex = i
 		}
 
 		items = append(items, listItem(m))
@@ -250,6 +255,7 @@ func New(chat *llm.ChatSession, models []string) *model {
 
 	lm := list.New(items, simpleDelegate{}, lw, 10)
 	lm.Title = "MODEL SELECT"
+	lm.Select(selectedIndex)
 	lm.SetFilteringEnabled(false)
 	lm.SetShowStatusBar(false)
 	lm.SetShowHelp(false)
@@ -266,7 +272,7 @@ func New(chat *llm.ChatSession, models []string) *model {
 		listWidth:     lw,
 		textarea:      ta,
 		spinner:       sp,
-		selectedModel: models[0],
+		selectedModel: models[selectedIndex],
 		legendHeight:  1,
 		currentFocus:  focusTextarea,
 	}
@@ -647,6 +653,10 @@ func (m *model) resize(w tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// TODO: Handle reasoning (intermediate thinking step):
+// - Render in a visually distinct style (e.g. blob or shaded box)
+// - Do not store in permanent chat history
+// - Display only during the "thinking" phase
 func (m *model) View() string {
 	mainArea := lipgloss.JoinHorizontal(lipgloss.Top, m.viewport.View(), m.modelList.View())
 

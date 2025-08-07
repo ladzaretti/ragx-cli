@@ -42,8 +42,8 @@ func RunCommandWithInput(ctx context.Context, io *StdioOptions, r io.Reader, nam
 	cmd := exec.CommandContext(ctx, name, args...)
 
 	cmd.Stdin = r
-	cmd.Stdout = io.Out
-	cmd.Stderr = io.ErrOut
+	cmd.Stdout = io.out
+	cmd.Stderr = io.errOut
 
 	return cmd.Run()
 }
@@ -51,9 +51,9 @@ func RunCommandWithInput(ctx context.Context, io *StdioOptions, r io.Reader, nam
 func RunCommand(ctx context.Context, io *StdioOptions, name string, args ...string) error {
 	cmd := exec.CommandContext(ctx, name, args...)
 
-	cmd.Stdin = io.In
-	cmd.Stdout = io.Out
-	cmd.Stderr = io.ErrOut
+	cmd.Stdin = io.in
+	cmd.Stdout = io.out
+	cmd.Stderr = io.errOut
 
 	return cmd.Run()
 }

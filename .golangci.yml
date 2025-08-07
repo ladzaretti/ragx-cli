@@ -89,7 +89,7 @@ linters:
     - sqlclosecheck
     - staticcheck
     - tagalign
-    - tagliatelle
+    # - tagliatelle
     - testableexamples
     - testifylint
     - testpackage
@@ -106,6 +106,17 @@ linters:
     - zerologlint
 
   settings:
+    tagalign:
+      align: true
+      sort: true
+      order:
+        - json
+        - yaml
+        - yml
+        - toml
+        - mapstructure
+        - binding
+        - validate
     cyclop:
       max-complexity: 15
     revive:

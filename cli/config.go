@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/ladzaretti/ragrat/clierror"
@@ -33,6 +34,7 @@ type Flags struct {
 	embeddingModel string
 	logDir         string
 	logFilename    string
+	logLevel       string
 }
 
 type Duration time.Duration
@@ -70,17 +72,25 @@ func (o *ConfigOptions) resolve() error {
 
 	o.resolved.path = cmp.Or(o.flags.configPath, o.fileConfig.path)
 
+	o.resolved.LLM.APIKey = cmp.Or(os.Getenv("OPENAI_API_KEY"), o.fileConfig.LLM.APIKey)
 	o.resolved.LLM.BaseURL = cmp.Or(o.flags.baseURL, o.fileConfig.LLM.BaseURL)
 	o.resolved.LLM.Model = cmp.Or(o.flags.model, o.fileConfig.LLM.Model)
 	o.resolved.LLM.EmbeddingModel = cmp.Or(o.flags.embeddingModel, o.fileConfig.LLM.EmbeddingModel)
 
 	o.resolved.Logging.Dir = cmp.Or(o.flags.logDir, o.fileConfig.Logging.Dir)
 	o.resolved.Logging.Filename = cmp.Or(o.flags.logFilename, o.fileConfig.Logging.Filename)
+	o.resolved.Logging.Level = cmp.Or(os.Getenv("LOG_LEVEL"), o.flags.logLevel, o.fileConfig.Logging.Level)
 
 	return nil
 }
 
-func (*ConfigOptions) Validate() error { return nil }
+func (o *ConfigOptions) Validate() error {
+	if _, err := genericclioptions.ParseLevel(o.resolved.Logging.Level); err != nil {
+		return err
+	}
+
+	return nil
+}
 
 func (*ConfigOptions) Run(context.Context, ...string) error { return nil }
 
@@ -91,10 +101,10 @@ func NewCmdConfig(defaults *DefaultRAGOptions) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "config",
-		Short: "Resolve and inspect the active vlt configuration (subcommands available)",
-		Long: fmt.Sprintf(`Resolve and display the active vlt configuration.
+		Short: "Resolve and inspect configuration (subcommands available)",
+		Long: fmt.Sprintf(`Resolve and display the active ragrat configuration.
 
-If --file is not provided, the default config path (~/%s) is used.`, defaultConfigName),
+If --config is not provided, the default config path (~/%s) is used.`, defaultConfigName),
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if err := clierror.Check(genericclioptions.RejectDisallowedFlags(cmd, hiddenFlags...)); err != nil {
 				return err
@@ -167,8 +177,7 @@ func (*generateConfigOptions) Complete() error { return nil }
 func (*generateConfigOptions) Validate() error { return nil }
 
 func (o *generateConfigOptions) Run(context.Context, ...string) error {
-	c := newFileConfig()
-	c.setDefaults()
+	c := GenerateDefault()
 
 	out, err := toml.Marshal(c)
 	if err := clierror.Check(err); err != nil {
