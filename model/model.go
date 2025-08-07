@@ -2,9 +2,12 @@ package model
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/ladzaretti/ragrat/llm"
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
@@ -13,14 +16,30 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/ladzaretti/ragrat/llm"
 )
 
 const (
 	listWidth     = 24
 	textareaHight = 2
-	extraLines    = 2 // spinner + status bar
+	extraLines    = 7 // spinner + status bar
 )
+
+const (
+	reasoningStartTag = "<think>"
+	reasoningEndTag   = "</think>"
+)
+
+const ascii = `          ▗ 
+▛▘▀▌▛▌▛▘▀▌▜▘
+▌ █▌▙▌▌ █▌▐▖
+    ▄▌      
+`
+
+var asciiComponentView = lipgloss.NewStyle().
+	Foreground(lipgloss.Color(mochaLavender)). // or mochaBlue
+	Bold(true).
+	PaddingLeft(1).
+	Render(ascii)
 
 var (
 	// https://catppuccin.com/palette/
@@ -45,47 +64,23 @@ var (
 
 	keyStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color(mochaSubtext0)).Bold(true)
 	dimStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color(mochaOverlay2))
-	boldStyle  = lipgloss.NewStyle().Bold(true)
 	spinnerCol = lipgloss.NewStyle().Foreground(lipgloss.Color(mochaMauve))
 
+	userPrefixStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(mochaBlue)).Bold(true)
+	llmPrefixStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color(mochaMauve)).Bold(true)
+	reasoningStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color(mochaSubtext0)).Italic(true)
+
 	itemStyle         = lipgloss.NewStyle().Padding(0, 1)
-	selectedItemStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color(mochaLavender)).
-				Bold(true).
-				Padding(0, 1)
+	selectedItemStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(mochaLavender)).Bold(true).Padding(0, 1)
 
 	// status bar related style.
 
-	insertStatusStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color(mochaGreen)).
-				Foreground(lipgloss.Color(mochaCrust)).
-				Bold(true).Padding(0, 1)
-
-	leaderStatusStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color(mochaMauve)).
-				Foreground(lipgloss.Color(mochaCrust)).
-				Bold(true).Padding(0, 1)
-
-	historyStatusStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color(mochaBlue)). // pick your preferred color
-				Foreground(lipgloss.Color(mochaCrust)).
-				Bold(true).Padding(0, 1)
-
-	modelsStatusStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color(mochaYellow)). // or mochaLavender
-				Foreground(lipgloss.Color(mochaCrust)).
-				Bold(true).Padding(0, 1)
-
-	defaultStatusStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color(mochaSurface0)).
-				Foreground(lipgloss.Color(mochaText)).
-				Bold(true).
-				Padding(0, 1)
-
-	errorStatusStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color(mochaRed)).
-				Foreground(lipgloss.Color(mochaCrust)).
-				Bold(true).Padding(0, 1)
+	insertStatusStyle  = lipgloss.NewStyle().Background(lipgloss.Color(mochaGreen)).Foreground(lipgloss.Color(mochaCrust)).Bold(true).Padding(0, 1)
+	leaderStatusStyle  = lipgloss.NewStyle().Background(lipgloss.Color(mochaMauve)).Foreground(lipgloss.Color(mochaCrust)).Bold(true).Padding(0, 1)
+	historyStatusStyle = lipgloss.NewStyle().Background(lipgloss.Color(mochaBlue)).Foreground(lipgloss.Color(mochaCrust)).Bold(true).Padding(0, 1)
+	modelsStatusStyle  = lipgloss.NewStyle().Background(lipgloss.Color(mochaYellow)).Foreground(lipgloss.Color(mochaCrust)).Bold(true).Padding(0, 1)
+	defaultStatusStyle = lipgloss.NewStyle().Background(lipgloss.Color(mochaSurface0)).Foreground(lipgloss.Color(mochaText)).Bold(true).Padding(0, 1)
+	errorStatusStyle   = lipgloss.NewStyle().Background(lipgloss.Color(mochaRed)).Foreground(lipgloss.Color(mochaCrust)).Bold(true).Padding(0, 1)
 
 	barStyle = lipgloss.NewStyle().
 			Background(lipgloss.Color(mochaMantle)).
@@ -143,9 +138,11 @@ type model struct {
 
 	// chat session
 
-	chat           *llm.ChatSession
-	selectedModel  string
-	historyBuilder strings.Builder
+	chat             *llm.ChatSession
+	selectedModel    string
+	historyBuilder   strings.Builder
+	responseBuilder  strings.Builder
+	reasoningBuilder strings.Builder
 
 	// focus management
 	currentFocus focus
@@ -153,9 +150,11 @@ type model struct {
 
 	// state
 
-	loading bool
-	cancel  context.CancelFunc // cancel for the in-flight LLM request
-	lastErr string             // shown in footer when non-empty
+	loading       bool
+	reasoning     bool
+	reasoningDone bool
+	cancel        context.CancelFunc // cancel for the in-flight LLM request
+	lastErr       string             // shown in footer when non-empty
 
 	// layout
 
@@ -280,7 +279,7 @@ func New(chat *llm.ChatSession, models []string, selectedModel string) *model {
 
 func (*model) Init() tea.Cmd { return textinput.Blink }
 
-func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:cyclop
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		return m.handleKey(msg)
@@ -303,11 +302,35 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loading = false
 
 		if msg.err != nil {
-			m.lastErr = msg.err.Error()
+			m.reasoning, m.reasoningDone = false, false
+
+			switch {
+			case errors.Is(msg.err, errLLMStreamDone):
+				m.historyBuilder.WriteString(m.responseBuilder.String())
+				m.responseBuilder.Reset()
+			default:
+				m.lastErr = strings.ToUpper(msg.err.Error())
+				m.reasoningBuilder.Reset()
+			}
+
 			return m, nil
 		}
 
-		m.writeHistory(msg.content)
+		switch strings.TrimSpace(msg.content) {
+		case reasoningStartTag:
+			m.reasoning = true
+		case reasoningEndTag:
+			m.reasoningBuilder.Reset()
+			m.reasoning = false
+			m.reasoningDone = true
+		default:
+			if m.reasoningDone && strings.TrimSpace(msg.content) == "" {
+				m.reasoningDone = false
+				return m, waitChunk(msg.ch)
+			}
+
+			m.writeViewport(msg.content)
+		}
 
 		if m.currentFocus != focusViewport {
 			m.viewport.GotoBottom()
@@ -348,13 +371,28 @@ func (m *model) ensureHistoryNewline() {
 	m.historyBuilder.WriteByte('\n')
 }
 
-// writeHistory appends to builder and refreshes viewport.
-func (m *model) writeHistory(s string) {
-	m.historyBuilder.WriteString(s)
+// writeViewport appends to builder and refreshes viewport.
+func (m *model) writeViewport(s string) {
+	if m.reasoning {
+		m.reasoningBuilder.WriteString(s)
+	} else {
+		m.responseBuilder.WriteString(s)
+	}
+
+	view := m.historyBuilder.String()
+
+	if m.responseBuilder.Len() > 0 {
+		view += m.responseBuilder.String()
+	}
+
+	if m.reasoningBuilder.Len() > 0 {
+		reasoning := m.reasoningBuilder.String()
+		view += "\n" + reasoningStyle.Render(reasoning) + "\n"
+	}
 
 	wrapped := lipgloss.NewStyle().
 		Width(m.viewport.Width).
-		Render(m.historyBuilder.String())
+		Render(view)
 
 	m.viewport.SetContent(wrapped)
 }
@@ -481,7 +519,7 @@ var leaderMap = map[string]func(*model) (tea.Model, tea.Cmd){
 	"h": func(m *model) (tea.Model, tea.Cmd) { m.focus(focusViewport); return m, nil },
 	"m": func(m *model) (tea.Model, tea.Cmd) { m.focus(focusModelList); return m, nil },
 	"l": func(m *model) (tea.Model, tea.Cmd) {
-		m.historyBuilder = strings.Builder{}
+		m.historyBuilder.Reset()
 		m.viewport.SetContent("")
 		m.focus(focusTextarea)
 		return m, textinput.Blink
@@ -583,6 +621,8 @@ func waitChunk(ch <-chan chunk) tea.Cmd {
 	}
 }
 
+var errLLMStreamDone = errors.New("llm stream done")
+
 // sendPrompt starts a streaming request and wires chunks back to Update.
 func (m *model) sendPrompt(p string) (tea.Model, tea.Cmd) {
 	// cancel previous request if exists
@@ -598,9 +638,9 @@ func (m *model) sendPrompt(p string) (tea.Model, tea.Cmd) {
 	m.lastErr = ""
 
 	m.ensureHistoryNewline()
-	m.writeHistory(boldStyle.Render("you:") + " " + p + "\n")
 
-	// buffered to avoid blocking OpenAI iterator
+	m.writeViewport(userPrefixStyle.Render("you:") + " " + p + "\n")
+
 	ch := make(chan chunk)
 
 	go func() {
@@ -612,18 +652,27 @@ func (m *model) sendPrompt(p string) (tea.Model, tea.Cmd) {
 			return
 		}
 
+		prefix := llmPrefixStyle.Render("llm(" + m.selectedModel + "): ")
+
 		for res, err := range stream {
 			if err != nil {
 				ch <- chunk{err: err}
 				return
 			}
+
+			if prefix != "" {
+				ch <- chunk{content: prefix}
+
+				prefix = ""
+			}
+
 			ch <- chunk{content: res.Content}
 		}
+
+		ch <- chunk{err: errLLMStreamDone}
 	}()
 
 	m.textarea.Reset()
-
-	m.writeHistory(boldStyle.Render("llm(" + m.selectedModel + "): "))
 
 	m.viewport.GotoBottom()
 
@@ -653,12 +702,13 @@ func (m *model) resize(w tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// TODO: Handle reasoning (intermediate thinking step):
-// - Render in a visually distinct style (e.g. blob or shaded box)
-// - Do not store in permanent chat history
-// - Display only during the "thinking" phase
 func (m *model) View() string {
-	mainArea := lipgloss.JoinHorizontal(lipgloss.Top, m.viewport.View(), m.modelList.View())
+	leftSide := lipgloss.JoinVertical(lipgloss.Left,
+		asciiComponentView, // or asciiComponent{}.View()
+		m.viewport.View(),
+	)
+
+	mainArea := lipgloss.JoinHorizontal(lipgloss.Top, leftSide, m.modelList.View())
 
 	modeLabel, legendItemStyle := m.currentFocus.String(), m.currentFocus.style()
 	if m.leaderActive {
