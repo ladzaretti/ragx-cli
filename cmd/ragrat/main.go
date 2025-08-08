@@ -8,6 +8,10 @@ import (
 	"github.com/ladzaretti/ragrat/genericclioptions"
 )
 
+// TODO: system prompt
+// TODO1: user prompt template with context
+// TODO3: embedding in sqlite
+
 func main() {
 	iostream := genericclioptions.NewDefaultIOStreams()
 	rag := cli.NewDefaultRAGCommand(iostream, os.Args[1:])

@@ -5,9 +5,9 @@ import (
 	"errors"
 	"slices"
 
+	"github.com/ladzaretti/ragrat/chatui"
 	"github.com/ladzaretti/ragrat/clierror"
 	"github.com/ladzaretti/ragrat/genericclioptions"
-	"github.com/ladzaretti/ragrat/model"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
@@ -41,7 +41,7 @@ func (o *TUIOptions) Validate() error {
 }
 
 func (o *TUIOptions) Run(_ context.Context, _ ...string) error {
-	p := tea.NewProgram(model.New(o.session, o.models, o.selectedModel), tea.WithAltScreen())
+	p := tea.NewProgram(chatui.New(o.session, o.models, o.selectedModel), tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		return errf("tui: %v\n", err)
 	}
