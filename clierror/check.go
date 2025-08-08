@@ -78,7 +78,7 @@ func printError(msg string) {
 		msg += "\n"
 	}
 
-	_, _ = fprintf(errWriter, msg)
+	fprintf(errWriter, msg) //nolint:errcheck
 }
 
 // ErrExit may be passed to CheckError to instruct it to output nothing but exit with

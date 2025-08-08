@@ -1,10 +1,7 @@
 package genericclioptions
 
 import (
-	"context"
 	"fmt"
-	"io"
-	"os/exec"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -36,47 +33,6 @@ func RejectDisallowedFlags(cmd *cobra.Command, disallowed ...string) error {
 	}
 
 	return nil
-}
-
-func RunCommandWithInput(ctx context.Context, io *StdioOptions, r io.Reader, name string, args ...string) error {
-	cmd := exec.CommandContext(ctx, name, args...)
-
-	cmd.Stdin = r
-	cmd.Stdout = io.out
-	cmd.Stderr = io.errOut
-
-	return cmd.Run()
-}
-
-func RunCommand(ctx context.Context, io *StdioOptions, name string, args ...string) error {
-	cmd := exec.CommandContext(ctx, name, args...)
-
-	cmd.Stdin = io.in
-	cmd.Stdout = io.out
-	cmd.Stderr = io.errOut
-
-	return cmd.Run()
-}
-
-func RunHook(ctx context.Context, io *StdioOptions, alias string, hook []string) (retErr error) {
-	if len(hook) == 0 {
-		return nil
-	}
-
-	cmd, args := hook[0], hook[1:]
-
-	io.Infof("running %s hook: %q...\n\n", alias, hook)
-
-	defer func() {
-		if retErr != nil {
-			io.Errorf("%s hook failed.\n\n", alias)
-			return
-		}
-
-		io.Infof("%s hook completed successfully.\n\n", alias)
-	}()
-
-	return RunCommand(ctx, io, cmd, args...)
 }
 
 func StringContains(str string, substrings ...string) bool {
