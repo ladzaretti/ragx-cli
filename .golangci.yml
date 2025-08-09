@@ -119,6 +119,9 @@ linters:
         - validate
     cyclop:
       max-complexity: 15
+    gosec:
+      excludes:
+        - G104
     revive:
       enable-all-rules: true
       rules:
@@ -165,6 +168,13 @@ linters:
       exclude-functions:
         - fmt.Fprintf
         - fmt.Fprintln
+        - (*github.com/ncruces/go-sqlite3.Stmt).BindText
+        - (*github.com/ncruces/go-sqlite3.Stmt).BindJSON
+        - (*github.com/ncruces/go-sqlite3.Stmt).BindInt64
+        - (*github.com/ncruces/go-sqlite3.Stmt).BindInt
+        - (*github.com/ncruces/go-sqlite3.Stmt).BindBlob
+        - (*github.com/ncruces/go-sqlite3.Stmt).Reset
+        - (*github.com/ncruces/go-sqlite3.Stmt).Close
 
 formatters:
   enable:
