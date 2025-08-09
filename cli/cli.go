@@ -5,16 +5,26 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"slices"
 
 	"github.com/ladzaretti/ragrat/clierror"
 	"github.com/ladzaretti/ragrat/genericclioptions"
 	"github.com/ladzaretti/ragrat/llm"
+	"github.com/ladzaretti/ragrat/vecdb"
 
 	"github.com/spf13/cobra"
 )
 
 var Version = "0.0.0"
+
+var (
+	ErrMissingQuery          = errors.New("missing required --query flag")
+	ErrMissingLLMModel       = errors.New("missing LLM model")
+	ErrMissingEmbeddingModel = errors.New("missing embedding model")
+	ErrMissingDimension      = errors.New("missing or invalid embedding dimension")
+	ErrInvalidSelectedModel  = errors.New("selected model not found in available models")
+)
 
 const (
 	appName                  = "ragrat"
@@ -23,9 +33,9 @@ const (
 	defaultConfigName        = ".ragrat.toml"
 	defaultLogFilename       = ".log"
 	defaultLogLevel          = "info"
-	defaultTemperature       = 0.7
-	defaultChunkSize         = 500
-	defaultTopK              = 4
+	defaultChunkSize         = 2000
+	defaultOverlap           = 200
+	defaultTopK              = 20
 )
 
 // preRunPartialCommands are commands that require partial pre-run execution
@@ -54,7 +64,12 @@ type DefaultRAGOptions struct {
 	configOptions *ConfigOptions
 	llmOptions    *llmOptions
 
+	vectordb *vecdb.VectorDB
+
 	cleanupFuncs []cleanupFunc
+
+	query         string
+	matchPatterns []string
 }
 
 var _ genericclioptions.CmdOptions = &DefaultRAGOptions{}
@@ -90,6 +105,37 @@ func (o *DefaultRAGOptions) Validate() error {
 	return o.configOptions.Validate()
 }
 
+func validateQueryParams(o *DefaultRAGOptions) error {
+	var (
+		model          = o.configOptions.resolved.LLM.Model
+		embeddingModel = o.configOptions.resolved.Embedding.EmbeddingModel
+		dim            = o.configOptions.resolved.Embedding.Dimensions
+	)
+
+	if model == "" {
+		return ErrMissingLLMModel
+	}
+
+	if embeddingModel == "" {
+		return ErrMissingEmbeddingModel
+	}
+
+	if dim == 0 {
+		return ErrMissingDimension
+	}
+
+	errs := make([]error, 0, len(o.matchPatterns))
+
+	for _, p := range o.matchPatterns {
+		_, err := filepath.Match(p, "")
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	return errors.Join(errs...)
+}
+
 func (o *DefaultRAGOptions) Run(ctx context.Context, args ...string) error {
 	cmd := ""
 	if len(args) == 1 {
@@ -107,6 +153,10 @@ func (o *DefaultRAGOptions) Run(ctx context.Context, args ...string) error {
 
 	o.Opts(genericclioptions.WithLogger(logger))
 
+	if err := validateQueryParams(o); err != nil {
+		return err
+	}
+
 	if err := o.initLLM(logger); err != nil {
 		return err
 	}
@@ -116,7 +166,37 @@ func (o *DefaultRAGOptions) Run(ctx context.Context, args ...string) error {
 		return errf("llm list models: %v", err)
 	}
 
+	if err := validateSelectedModels(m, o.llmOptions.selectedModel, o.configOptions.resolved.Embedding.EmbeddingModel); err != nil {
+		return err
+	}
+
+	v, err := vecdb.New(o.configOptions.resolved.Embedding.Dimensions)
+	if err != nil {
+		return errf("create vector database:%v", err)
+	}
+
 	o.llmOptions.models = m
+	o.vectordb = v
+
+	return nil
+}
+
+func validateSelectedModels(models []string, selected ...string) error {
+	errs := make([]error, 0, len(selected))
+
+	for _, s := range selected {
+		if !slices.Contains(models, s) {
+			errs = append(errs, fmt.Errorf("%w: %q", ErrInvalidSelectedModel, s))
+		}
+	}
+
+	return errors.Join(errs...)
+}
+
+func (o *DefaultRAGOptions) RunQuery(_ context.Context, _ ...string) error {
+	if o.query == "" {
+		return ErrMissingQuery
+	}
 
 	return nil
 }
@@ -146,6 +226,12 @@ func (o *DefaultRAGOptions) initLLM(logger *slog.Logger) error {
 		llm.WithLogger(logger),
 	}
 
+	temperature := o.configOptions.resolved.LLM.Temperature
+
+	if temperature != 0.0 {
+		opts = append(opts, llm.WithTemperature(temperature))
+	}
+
 	client, err := llm.NewClient(opts...)
 	if err != nil {
 		return errf("new client: %v", err)
@@ -154,7 +240,15 @@ func (o *DefaultRAGOptions) initLLM(logger *slog.Logger) error {
 	model := o.configOptions.resolved.LLM.Model
 	system := o.configOptions.fileConfig.Prompt.System
 
-	session, err := llm.NewChat(client, system, model, llm.WithSessionLogger(logger))
+	sessionOpts := []llm.SessionOpt{
+		llm.WithSessionLogger(logger),
+	}
+
+	if temperature != 0.0 {
+		sessionOpts = append(sessionOpts, llm.WithSessionTemperature(temperature))
+	}
+
+	session, err := llm.NewChat(client, system, model, sessionOpts...)
 	if err != nil {
 		return errf("new chat session: %v", err)
 	}
@@ -171,7 +265,8 @@ func NewDefaultRAGCommand(iostreams *genericclioptions.IOStreams, args []string)
 	o := NewDefaultRAGOptions(iostreams)
 
 	cmd := &cobra.Command{
-		Use:   "ragrat",
+		Use:   "ragrat [files]",
+		Args:  cobra.MinimumNArgs(1),
 		Short: "",
 		Long: `ragrat is a terminal based, self-hosted Retrieval-Augmented Generation (RAG) assistant.
 
@@ -183,9 +278,14 @@ Configuration is handled via flags or config files.`,
 		PersistentPostRunE: func(_ *cobra.Command, _ []string) error {
 			return clierror.Check(executeCleanup(o.cleanupFuncs))
 		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return clierror.Check(o.RunQuery(cmd.Context(), args...))
+		},
 	}
 
 	cmd.SetArgs(args)
+
+	cmd.Flags().StringVarP(&o.query, "query", "q", "", "Query to send to the LLM")
 
 	cmd.PersistentFlags().StringVarP(&o.configOptions.flags.baseURL, "base-url", "u", "", "Override LLM base URL")
 	cmd.PersistentFlags().StringVarP(&o.configOptions.flags.model, "model", "m", "", "Override LLM model")
@@ -194,6 +294,8 @@ Configuration is handled via flags or config files.`,
 	cmd.PersistentFlags().StringVarP(&o.configOptions.flags.logDir, "log-dir", "d", "", "Override log directory")
 	cmd.PersistentFlags().StringVarP(&o.configOptions.flags.logFilename, "log-file", "f", "", "Override log filename")
 	cmd.PersistentFlags().StringVarP(&o.configOptions.flags.logLevel, "log-level", "l", "", "Set log level (debug, info, warn, error)")
+	cmd.PersistentFlags().StringSliceVarP(&o.matchPatterns, "match", "M", nil, "Glob pattern(s) for matching files (e.g. '*.md', 'data/*.txt')")
+	cmd.PersistentFlags().IntVarP(&o.configOptions.flags.dimensions, "dim", "", 0, "Embedding vector dimension (must match embedding model output)")
 
 	cmd.AddCommand(NewCmdTUI(o))
 	cmd.AddCommand(NewCmdConfig(o))

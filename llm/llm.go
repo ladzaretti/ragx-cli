@@ -33,10 +33,11 @@ type Client struct {
 }
 
 type config struct {
-	logger  *slog.Logger
-	baseURL string
-	apiKey  string
-	model   string
+	logger      *slog.Logger
+	baseURL     string
+	apiKey      string
+	model       string
+	temperature float64
 }
 
 // Option configures the OpenAI client.
@@ -63,9 +64,17 @@ func WithModel(model string) Option {
 	}
 }
 
+// WithLogger sets a custom slog.Logger.
 func WithLogger(logger *slog.Logger) Option {
 	return func(o *config) {
 		o.logger = logger
+	}
+}
+
+// WithTemperature sets the LLM completion temperature.
+func WithTemperature(t float64) Option {
+	return func(o *config) {
+		o.temperature = t
 	}
 }
 
@@ -113,12 +122,19 @@ func (c *Client) GenerateCompletion(ctx context.Context, req CompletionRequest) 
 	c.logger.Info("generate completion", "model", model)
 	c.logger.Debug("prompt", "text", req.Prompt)
 
-	completion, err := c.client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
-		Model: model,
+	params := openai.ChatCompletionNewParams{
+		Model:       model,
+		Temperature: openai.Float(c.temperature),
 		Messages: []openai.ChatCompletionMessageParamUnion{
 			openai.UserMessage(req.Prompt),
 		},
-	})
+	}
+
+	if c.temperature != 0.0 {
+		params.Temperature = openai.Float(c.temperature)
+	}
+
+	completion, err := c.client.Chat.Completions.New(ctx, params)
 	if err != nil {
 		return "", err
 	}
@@ -232,17 +248,26 @@ func (c *Client) EmbedBatch(ctx context.Context, req EmbedBatchRequest) (*EmbedB
 // Not thread safe, create a separate ChatSession per goroutine
 // or protect calls with a mutex.
 type ChatSession struct {
-	logger  *slog.Logger
-	client  openai.Client
-	history []openai.ChatCompletionMessageParamUnion
-	model   string
+	logger      *slog.Logger
+	client      openai.Client
+	history     []openai.ChatCompletionMessageParamUnion
+	model       string
+	temperature float64
 }
 
 type SessionOpt func(*ChatSession)
 
+// WithSessionLogger sets a session custom slog.Logger.
 func WithSessionLogger(logger *slog.Logger) SessionOpt {
 	return func(c *ChatSession) {
 		c.logger = logger
+	}
+}
+
+// WithSessionTemperature sets the session LLM completion temperature.
+func WithSessionTemperature(t float64) SessionOpt {
+	return func(o *ChatSession) {
+		o.temperature = t
 	}
 }
 
@@ -306,14 +331,18 @@ func (s *ChatSession) Send(ctx context.Context, model string, contents ...string
 
 	s.appendUserMessages(contents)
 
-	chatReq := openai.ChatCompletionNewParams{
+	params := openai.ChatCompletionNewParams{
 		Model:    model,
 		Messages: s.history,
 	}
 
-	s.logger.Debug("chat request", "model", model, "message_count", len(chatReq.Messages))
+	if s.temperature != 0.0 {
+		params.Temperature = openai.Float(s.temperature)
+	}
 
-	completion, err := s.client.Chat.Completions.New(ctx, chatReq)
+	s.logger.Debug("chat request", "model", model, "message_count", len(params.Messages))
+
+	completion, err := s.client.Chat.Completions.New(ctx, params)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			s.removeLastUserMessage()
@@ -353,11 +382,16 @@ func (s *ChatSession) SendStreaming(ctx context.Context, model string, contents 
 
 	s.appendUserMessages(contents)
 
-	req := openai.ChatCompletionNewParams{
+	params := openai.ChatCompletionNewParams{
 		Model:    model,
 		Messages: s.history,
 	}
-	stream := s.client.Chat.Completions.NewStreaming(ctx, req)
+
+	if s.temperature != 0.0 {
+		params.Temperature = openai.Float(s.temperature)
+	}
+
+	stream := s.client.Chat.Completions.NewStreaming(ctx, params)
 
 	acc := openai.ChatCompletionAccumulator{}
 

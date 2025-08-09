@@ -12,7 +12,6 @@ import (
 	"github.com/ladzaretti/ragrat/clierror"
 	"github.com/ladzaretti/ragrat/genericclioptions"
 
-	"github.com/pelletier/go-toml/v2"
 	"github.com/spf13/cobra"
 )
 
@@ -32,6 +31,7 @@ type Flags struct {
 	baseURL        string
 	model          string
 	embeddingModel string
+	dimensions     int
 	logDir         string
 	logFilename    string
 	logLevel       string
@@ -75,7 +75,9 @@ func (o *ConfigOptions) resolve() error {
 	o.resolved.LLM.APIKey = cmp.Or(os.Getenv("OPENAI_API_KEY"), o.fileConfig.LLM.APIKey)
 	o.resolved.LLM.BaseURL = cmp.Or(o.flags.baseURL, o.fileConfig.LLM.BaseURL)
 	o.resolved.LLM.Model = cmp.Or(o.flags.model, o.fileConfig.LLM.Model)
-	o.resolved.LLM.EmbeddingModel = cmp.Or(o.flags.embeddingModel, o.fileConfig.LLM.EmbeddingModel)
+
+	o.resolved.Embedding.EmbeddingModel = cmp.Or(o.flags.embeddingModel, o.fileConfig.Embedding.EmbeddingModel)
+	o.resolved.Embedding.Dimensions = cmp.Or(o.flags.dimensions, o.fileConfig.Embedding.Dimensions)
 
 	o.resolved.Logging.Dir = cmp.Or(o.flags.logDir, o.fileConfig.Logging.Dir)
 	o.resolved.Logging.Filename = cmp.Or(o.flags.logFilename, o.fileConfig.Logging.Filename)
@@ -177,14 +179,7 @@ func (*generateConfigOptions) Complete() error { return nil }
 func (*generateConfigOptions) Validate() error { return nil }
 
 func (o *generateConfigOptions) Run(context.Context, ...string) error {
-	c := GenerateDefault()
-
-	out, err := toml.Marshal(c)
-	if err := clierror.Check(err); err != nil {
-		return err
-	}
-
-	o.Printf("%s", string(out))
+	o.Printf("%s", GenerateDefault())
 
 	return nil
 }

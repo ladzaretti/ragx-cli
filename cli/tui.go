@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"errors"
-	"slices"
 
 	"github.com/ladzaretti/ragrat/chatui"
 	"github.com/ladzaretti/ragrat/clierror"
@@ -32,13 +31,7 @@ func NewTUIOptions(stdio *genericclioptions.StdioOptions, llm *llmOptions) *TUIO
 
 func (*TUIOptions) Complete() error { return nil }
 
-func (o *TUIOptions) Validate() error {
-	if !slices.Contains(o.models, o.selectedModel) {
-		return errf("%w: %q", ErrInvalidModel, o.selectedModel)
-	}
-
-	return nil
-}
+func (*TUIOptions) Validate() error { return nil }
 
 func (o *TUIOptions) Run(_ context.Context, _ ...string) error {
 	p := tea.NewProgram(chatui.New(o.session, o.models, o.selectedModel), tea.WithAltScreen())
