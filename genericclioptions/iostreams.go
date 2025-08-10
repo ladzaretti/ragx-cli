@@ -76,6 +76,13 @@ func (io *IOStreams) Infof(format string, args ...any) {
 	}
 }
 
+// Warnf writes a formatted message to the standard output stream.
+func (io *IOStreams) Warnf(format string, args ...any) {
+	if io.level <= slog.LevelWarn {
+		fmt.Fprintf(io.out, "WARN "+format, args...)
+	}
+}
+
 // Errorf writes a formatted message to the error stream.
 func (io *IOStreams) Errorf(format string, args ...any) {
 	if io.level <= slog.LevelError {

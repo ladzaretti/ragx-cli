@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
+	"regexp"
 	"slices"
 
 	"github.com/ladzaretti/ragrat/clierror"
@@ -38,10 +39,6 @@ const (
 	defaultTopK              = 20
 )
 
-// preRunPartialCommands are commands that require partial pre-run execution
-// without client creation.
-var preRunPartialCommands = []string{"config", "generate", "validate"}
-
 type cleanupFunc func() error
 
 type llmOptions struct {
@@ -57,6 +54,8 @@ func (*llmOptions) Complete() error { return nil }
 
 func (*llmOptions) Validate() error { return nil }
 
+type step func(ctx context.Context, args ...string) error
+
 // DefaultRAGOptions is the base cli config shared across all ragrat subcommands.
 type DefaultRAGOptions struct {
 	*genericclioptions.StdioOptions
@@ -66,10 +65,12 @@ type DefaultRAGOptions struct {
 
 	vectordb *vecdb.VectorDB
 
-	cleanupFuncs []cleanupFunc
-
+	cleanupFuncs  []cleanupFunc
 	query         string
 	matchPatterns []string
+	matchREs      []*regexp.Regexp
+
+	run []step
 }
 
 var _ genericclioptions.CmdOptions = &DefaultRAGOptions{}
@@ -94,7 +95,22 @@ func (o *DefaultRAGOptions) Complete() error {
 		return err
 	}
 
-	return o.llmOptions.Complete()
+	if err := o.llmOptions.Complete(); err != nil {
+		return err
+	}
+
+	return o.complete()
+}
+
+func (o *DefaultRAGOptions) complete() error { //nolint:revive
+	matchREs, err := compileREs(o.matchPatterns...)
+	if err != nil {
+		return err
+	}
+
+	o.matchREs = matchREs
+
+	return nil
 }
 
 func (o *DefaultRAGOptions) Validate() error {
@@ -105,47 +121,32 @@ func (o *DefaultRAGOptions) Validate() error {
 	return o.configOptions.Validate()
 }
 
-func validateQueryParams(o *DefaultRAGOptions) error {
-	var (
-		model          = o.configOptions.resolved.LLM.Model
-		embeddingModel = o.configOptions.resolved.Embedding.EmbeddingModel
-		dim            = o.configOptions.resolved.Embedding.Dimensions
-	)
-
-	if model == "" {
-		return ErrMissingLLMModel
-	}
-
-	if embeddingModel == "" {
-		return ErrMissingEmbeddingModel
-	}
-
-	if dim == 0 {
-		return ErrMissingDimension
-	}
-
-	errs := make([]error, 0, len(o.matchPatterns))
-
-	for _, p := range o.matchPatterns {
-		_, err := filepath.Match(p, "")
-		if err != nil {
-			errs = append(errs, err)
+func (o *DefaultRAGOptions) Run(ctx context.Context, args ...string) error {
+	for _, s := range o.run {
+		if err := s(ctx, args...); err != nil {
+			return err
 		}
 	}
 
-	return errors.Join(errs...)
+	return nil
 }
 
-func (o *DefaultRAGOptions) Run(ctx context.Context, args ...string) error {
-	cmd := ""
-	if len(args) == 1 {
-		cmd = args[0]
-	}
+func (o *DefaultRAGOptions) planFor(cmd *cobra.Command) {
+	o.run = o.run[:0]
 
-	if slices.Contains(preRunPartialCommands, cmd) {
-		return nil
+	switch cmd.CalledAs() {
+	case "ragrat", "tui":
+		o.add(o.prepareLLMEnvironment)
+		o.add(o.embed)
+	default:
 	}
+}
 
+func (o *DefaultRAGOptions) add(rs step) {
+	o.run = append(o.run, rs)
+}
+
+func (o *DefaultRAGOptions) prepareLLMEnvironment(ctx context.Context, _ ...string) error {
 	logger, err := o.initLogger()
 	if err != nil {
 		return err
@@ -181,16 +182,23 @@ func (o *DefaultRAGOptions) Run(ctx context.Context, args ...string) error {
 	return nil
 }
 
-func validateSelectedModels(models []string, selected ...string) error {
-	errs := make([]error, 0, len(selected))
-
-	for _, s := range selected {
-		if !slices.Contains(models, s) {
-			errs = append(errs, fmt.Errorf("%w: %q", ErrInvalidSelectedModel, s))
-		}
+func (o *DefaultRAGOptions) embed(ctx context.Context, args ...string) error {
+	discovered, err := discover(args, o.matchREs)
+	if err != nil {
+		return err
 	}
 
-	return errors.Join(errs...)
+	chunked, err := chunkFiles(ctx, o.IOStreams, discovered,
+		o.configOptions.resolved.Embedding.ChunkSize,
+		o.configOptions.resolved.Embedding.Overlap,
+	)
+	if err != nil {
+		return err
+	}
+
+	o.Infof("discovered %d files, produced %d chunks", len(chunked), totalChunks(chunked))
+
+	return nil
 }
 
 func (o *DefaultRAGOptions) RunQuery(_ context.Context, _ ...string) error {
@@ -272,8 +280,9 @@ func NewDefaultRAGCommand(iostreams *genericclioptions.IOStreams, args []string)
 
 It supports local and remote LLMs via OpenAI-compatible APIs.
 Configuration is handled via flags or config files.`,
-		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
-			return clierror.Check(genericclioptions.ExecuteCommand(cmd.Context(), o, cmd.Name()))
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			o.planFor(cmd)
+			return clierror.Check(genericclioptions.ExecuteCommand(cmd.Context(), o, args...))
 		},
 		PersistentPostRunE: func(_ *cobra.Command, _ []string) error {
 			return clierror.Check(executeCleanup(o.cleanupFuncs))
@@ -303,6 +312,49 @@ Configuration is handled via flags or config files.`,
 	return cmd
 }
 
+func validateQueryParams(o *DefaultRAGOptions) error {
+	var (
+		model          = o.configOptions.resolved.LLM.Model
+		embeddingModel = o.configOptions.resolved.Embedding.EmbeddingModel
+		dim            = o.configOptions.resolved.Embedding.Dimensions
+	)
+
+	if model == "" {
+		return ErrMissingLLMModel
+	}
+
+	if embeddingModel == "" {
+		return ErrMissingEmbeddingModel
+	}
+
+	if dim == 0 {
+		return ErrMissingDimension
+	}
+
+	errs := make([]error, 0, len(o.matchPatterns))
+
+	for _, p := range o.matchPatterns {
+		_, err := filepath.Match(p, "")
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	return errors.Join(errs...)
+}
+
+func validateSelectedModels(models []string, selected ...string) error {
+	errs := make([]error, 0, len(selected))
+
+	for _, s := range selected {
+		if !slices.Contains(models, s) {
+			errs = append(errs, fmt.Errorf("%w: %q", ErrInvalidSelectedModel, s))
+		}
+	}
+
+	return errors.Join(errs...)
+}
+
 // executeCleanup executes cleanup functions in reverse order,
 // similar to defer statements.
 //
@@ -321,6 +373,25 @@ func executeCleanup(fs []cleanupFunc) error {
 	}
 
 	return errors.Join(errs...)
+}
+
+func compileREs(exprs ...string) ([]*regexp.Regexp, error) {
+	var (
+		matchREs = make([]*regexp.Regexp, 0, len(exprs))
+		errs     = make([]error, 0, len(exprs))
+	)
+
+	for _, expr := range exprs {
+		re, err := regexp.Compile(expr)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("invalid --match regex %q: %w", expr, err))
+			continue
+		}
+
+		matchREs = append(matchREs, re)
+	}
+
+	return matchREs, errors.Join(errs...)
 }
 
 func errf(format string, a ...any) error {
