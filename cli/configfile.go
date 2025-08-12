@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/ladzaretti/ragrat/cli/prompt"
 	"github.com/pelletier/go-toml/v2"
 )
 
@@ -86,6 +87,8 @@ func (c *Config) setDefaults() error {
 	c.Logging.Level = cmp.Or(c.Logging.Level, defaultLogLevel)
 
 	c.LLM.BaseURL = cmp.Or(c.LLM.BaseURL, string(defaultBaseURL))
+
+	c.Prompt.System = cmp.Or(c.Prompt.System, prompt.DefaultSystemPrompt)
 
 	c.Embedding.ChunkSize = cmp.Or(c.Embedding.ChunkSize, defaultChunkSize)
 	c.Embedding.Overlap = cmp.Or(c.Embedding.Overlap, int(defaultOverlap))

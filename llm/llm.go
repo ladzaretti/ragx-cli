@@ -29,7 +29,7 @@ var (
 // Client implements an open ai api compatible client.
 type Client struct {
 	config
-	client openai.Client
+	openaiClient openai.Client
 }
 
 type config struct {
@@ -97,8 +97,8 @@ func NewClient(opts ...Option) (*Client, error) {
 	}
 
 	return &Client{
-		client: openai.NewClient(options...),
-		config: *c,
+		openaiClient: openai.NewClient(options...),
+		config:       *c,
 	}, nil
 }
 
@@ -134,7 +134,7 @@ func (c *Client) GenerateCompletion(ctx context.Context, req CompletionRequest) 
 		params.Temperature = openai.Float(c.temperature)
 	}
 
-	completion, err := c.client.Chat.Completions.New(ctx, params)
+	completion, err := c.openaiClient.Chat.Completions.New(ctx, params)
 	if err != nil {
 		return "", err
 	}
@@ -156,7 +156,7 @@ func (c *Client) selectModel(override string) (string, error) {
 
 // ListModels returns available model IDs.
 func (c *Client) ListModels(ctx context.Context) ([]string, error) {
-	res, err := c.client.Models.List(ctx)
+	res, err := c.openaiClient.Models.List(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list models: %w", err)
 	}
@@ -189,7 +189,7 @@ func (c *Client) Embed(ctx context.Context, req EmbedRequest) (*EmbedResponse, e
 
 	c.logger.Info("embed request", "model", req.Model, "input_len", len(req.Input))
 
-	res, err := c.client.Embeddings.New(ctx, params)
+	res, err := c.openaiClient.Embeddings.New(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("embedding request failed: %w", err)
 	}
@@ -224,7 +224,7 @@ func (c *Client) EmbedBatch(ctx context.Context, req EmbedBatchRequest) (*EmbedB
 
 	c.logger.Info("embed batch request", "model", req.Model, "input_count", len(req.Input))
 
-	res, err := c.client.Embeddings.New(ctx, params)
+	res, err := c.openaiClient.Embeddings.New(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("embedding batch request failed: %w", err)
 	}
@@ -249,7 +249,7 @@ func (c *Client) EmbedBatch(ctx context.Context, req EmbedBatchRequest) (*EmbedB
 // or protect calls with a mutex.
 type ChatSession struct {
 	logger      *slog.Logger
-	client      openai.Client
+	client      *Client
 	history     []openai.ChatCompletionMessageParamUnion
 	model       string
 	temperature float64
@@ -274,7 +274,7 @@ func WithSessionTemperature(t float64) SessionOpt {
 // NewChat creates a new chat session with optional system prompt.
 func NewChat(c *Client, systemPrompt, model string, opts ...SessionOpt) (*ChatSession, error) {
 	session := &ChatSession{
-		client: c.client,
+		client: c,
 		logger: slog.Default(),
 	}
 
@@ -342,7 +342,7 @@ func (s *ChatSession) Send(ctx context.Context, model string, contents ...string
 
 	s.logger.Debug("chat request", "model", model, "message_count", len(params.Messages))
 
-	completion, err := s.client.Chat.Completions.New(ctx, params)
+	completion, err := s.client.openaiClient.Chat.Completions.New(ctx, params)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			s.removeLastUserMessage()
@@ -391,7 +391,7 @@ func (s *ChatSession) SendStreaming(ctx context.Context, model string, contents 
 		params.Temperature = openai.Float(s.temperature)
 	}
 
-	stream := s.client.Chat.Completions.NewStreaming(ctx, params)
+	stream := s.client.openaiClient.Chat.Completions.NewStreaming(ctx, params)
 
 	acc := openai.ChatCompletionAccumulator{}
 

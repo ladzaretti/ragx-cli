@@ -42,10 +42,12 @@ const (
 type cleanupFunc func() error
 
 type llmOptions struct {
-	client        *llm.Client
-	session       *llm.ChatSession
-	models        []string
-	selectedModel string
+	client         *llm.Client
+	session        *llm.ChatSession
+	vectordb       *vecdb.VectorDB
+	models         []string
+	selectedModel  string
+	embeddingModel string
 }
 
 var _ genericclioptions.BaseOptions = &llmOptions{}
@@ -62,8 +64,6 @@ type DefaultRAGOptions struct {
 
 	configOptions *ConfigOptions
 	llmOptions    *llmOptions
-
-	vectordb *vecdb.VectorDB
 
 	cleanupFuncs  []cleanupFunc
 	query         string
@@ -177,7 +177,7 @@ func (o *DefaultRAGOptions) prepareLLMEnvironment(ctx context.Context, _ ...stri
 	}
 
 	o.llmOptions.models = m
-	o.vectordb = v
+	o.llmOptions.vectordb = v
 
 	return nil
 }
@@ -188,7 +188,7 @@ func (o *DefaultRAGOptions) embed(ctx context.Context, args ...string) error {
 		return err
 	}
 
-	chunked, err := chunkFiles(ctx, o.IOStreams, discovered,
+	chunkedFiles, err := chunkFiles(ctx, o.IOStreams, discovered,
 		o.configOptions.resolved.Embedding.ChunkSize,
 		o.configOptions.resolved.Embedding.Overlap,
 	)
@@ -196,9 +196,43 @@ func (o *DefaultRAGOptions) embed(ctx context.Context, args ...string) error {
 		return err
 	}
 
-	o.Infof("discovered %d files, produced %d chunks", len(chunked), totalChunks(chunked))
+	o.Infof("discovered %d files, produced %d chunks", len(chunkedFiles), totalChunks(chunkedFiles))
+
+	for _, cf := range chunkedFiles {
+		req := llm.EmbedBatchRequest{Input: cf.chunks, Model: o.configOptions.resolved.Embedding.EmbeddingModel}
+
+		res, err := o.llmOptions.client.EmbedBatch(ctx, req)
+		if err != nil {
+			return err
+		}
+
+		embedded := make([]vecdb.Chunk, 0, len(cf.chunks))
+
+		for i, vec := range res.Vectors {
+			vecChunk := vecdb.Chunk{
+				Content: cf.chunks[i],
+				Vec:     toFloat32Slice(vec),
+				Meta:    vecdb.Meta{Path: cf.path, Index: i},
+			}
+			embedded = append(embedded, vecChunk)
+		}
+
+		if err := o.llmOptions.vectordb.Insert(embedded); err != nil {
+			return err
+		}
+	}
 
 	return nil
+}
+
+func toFloat32Slice(src []float64) (f32 []float32) {
+	f32 = make([]float32, len(src))
+
+	for i, v := range src {
+		f32[i] = float32(v)
+	}
+
+	return f32
 }
 
 func (o *DefaultRAGOptions) RunQuery(_ context.Context, _ ...string) error {
@@ -245,8 +279,11 @@ func (o *DefaultRAGOptions) initLLM(logger *slog.Logger) error {
 		return errf("new client: %v", err)
 	}
 
-	model := o.configOptions.resolved.LLM.Model
-	system := o.configOptions.fileConfig.Prompt.System
+	var (
+		model          = o.configOptions.resolved.LLM.Model
+		embeddingModel = o.configOptions.resolved.Embedding.EmbeddingModel
+		system         = o.configOptions.fileConfig.Prompt.System
+	)
 
 	sessionOpts := []llm.SessionOpt{
 		llm.WithSessionLogger(logger),
@@ -264,6 +301,7 @@ func (o *DefaultRAGOptions) initLLM(logger *slog.Logger) error {
 	o.llmOptions.client = client
 	o.llmOptions.session = session
 	o.llmOptions.selectedModel = model
+	o.llmOptions.embeddingModel = embeddingModel
 
 	return nil
 }

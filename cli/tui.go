@@ -34,7 +34,18 @@ func (*TUIOptions) Complete() error { return nil }
 func (*TUIOptions) Validate() error { return nil }
 
 func (o *TUIOptions) Run(_ context.Context, _ ...string) error {
-	p := tea.NewProgram(chatui.New(o.session, o.models, o.selectedModel), tea.WithAltScreen())
+	var (
+		tui = chatui.New(
+			o.client,
+			o.session,
+			o.vectordb,
+			o.models,
+			o.selectedModel,
+			o.embeddingModel,
+		)
+		p = tea.NewProgram(tui, tea.WithAltScreen())
+	)
+
 	if _, err := p.Run(); err != nil {
 		return errf("tui: %v\n", err)
 	}
@@ -44,7 +55,10 @@ func (o *TUIOptions) Run(_ context.Context, _ ...string) error {
 
 // NewCmdTUI creates the <cmd> cobra command.
 func NewCmdTUI(defaults *DefaultRAGOptions) *cobra.Command {
-	o := NewTUIOptions(defaults.StdioOptions, defaults.llmOptions)
+	o := NewTUIOptions(
+		defaults.StdioOptions,
+		defaults.llmOptions,
+	)
 
 	cmd := &cobra.Command{
 		Use:   "tui",

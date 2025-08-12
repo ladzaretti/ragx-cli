@@ -91,6 +91,10 @@ func discover(files []string, matchREs []*regexp.Regexp) ([]string, error) {
 		}
 
 		matches := func(path string) bool {
+			if len(matchREs) == 0 {
+				return true
+			}
+
 			path = filepath.ToSlash(path)
 			for _, re := range matchREs {
 				if re.MatchString(path) {
@@ -101,8 +105,11 @@ func discover(files []string, matchREs []*regexp.Regexp) ([]string, error) {
 			return false
 		}
 
-		if !fi.IsDir() && matches(root) {
-			seen = append(seen, root)
+		if !fi.IsDir() {
+			if matches(root) {
+				seen = append(seen, root)
+			}
+
 			continue
 		}
 
@@ -182,12 +189,6 @@ func totalChunks(chunkedFiles []*fileChunks) (n int) {
 
 	return n
 }
-
-// TODO: system prompt
-// TODO1: user prompt template with context
-
-// TODO3: embedding files
-// 	- embed files
 
 // FIXME: make the model select popup based
 // 	- add a status indication with the current model selected instead.

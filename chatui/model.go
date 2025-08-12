@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/ladzaretti/ragrat/llm"
+	"github.com/ladzaretti/ragrat/vecdb"
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
@@ -37,8 +38,12 @@ type model struct {
 
 	// chat session
 
-	chat             *llm.ChatSession
-	selectedModel    string
+	chat           *llm.ChatSession
+	client         *llm.Client
+	vecdb          *vecdb.VectorDB
+	selectedModel  string
+	embeddingModel string
+
 	historyBuilder   strings.Builder
 	responseBuilder  strings.Builder
 	reasoningBuilder strings.Builder
@@ -114,7 +119,7 @@ func (m *model) focus(f focus) {
 }
 
 // New creates a new [model].
-func New(chat *llm.ChatSession, models []string, selectedModel string) *model {
+func New(client *llm.Client, chat *llm.ChatSession, vecdb *vecdb.VectorDB, models []string, chatModel string, embeddingModel string) *model {
 	ta := textarea.New()
 	ta.Placeholder = "Ask anything\n(Press Ctrl+S to submit)"
 	ta.Focus()
@@ -141,7 +146,7 @@ func New(chat *llm.ChatSession, models []string, selectedModel string) *model {
 			longest = l
 		}
 
-		if m == selectedModel {
+		if m == chatModel {
 			selectedIndex = i
 		}
 
@@ -164,15 +169,18 @@ func New(chat *llm.ChatSession, models []string, selectedModel string) *model {
 		Background(lipgloss.Color(mochaSurface0))
 
 	return &model{
-		chat:          chat,
-		viewport:      viewport.New(0, 0),
-		modelList:     lm,
-		listWidth:     lw,
-		textarea:      ta,
-		spinner:       sp,
-		selectedModel: models[selectedIndex],
-		legendHeight:  1,
-		currentFocus:  focusTextarea,
+		client:         client,
+		chat:           chat,
+		vecdb:          vecdb,
+		embeddingModel: embeddingModel,
+		viewport:       viewport.New(0, 0),
+		modelList:      lm,
+		listWidth:      lw,
+		textarea:       ta,
+		spinner:        sp,
+		selectedModel:  models[selectedIndex],
+		legendHeight:   1,
+		currentFocus:   focusTextarea,
 	}
 }
 
@@ -196,6 +204,15 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:cyclop
 		}
 
 		return m, nil
+
+	case ragErr:
+		m.loading = false
+		m.lastErr = strings.ToUpper(msg.err.Error())
+		m.updateViewport()
+
+		return m, nil
+	case ragReady:
+		return m, waitChunk(msg.ch)
 
 	case streamChunk:
 		if m.loading { // first chunk has arrived
@@ -465,7 +482,7 @@ func (m *model) handleTextarea(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // sendPrompt starts a streaming request and wires chunks back to Update.
-func (m *model) sendPrompt(p string) (tea.Model, tea.Cmd) {
+func (m *model) sendPrompt(q string) (tea.Model, tea.Cmd) {
 	// cancel previous request if exists
 	if m.cancel != nil {
 		m.cancel()
@@ -479,16 +496,13 @@ func (m *model) sendPrompt(p string) (tea.Model, tea.Cmd) {
 	m.lastErr = ""
 
 	m.ensureHistoryNewline()
-	m.writeHistory(userPrefixStyle.Render("you:") + " " + p + "\n")
+	m.writeHistory(userPrefixStyle.Render("you:") + " " + q + "\n")
 	m.updateViewport()
 
-	ch := sendStream(ctx, m.chat, m.selectedModel, p)
-
 	m.textarea.Reset()
-
 	m.viewport.GotoBottom()
 
-	return m, tea.Batch(m.spinner.Tick, waitChunk(ch))
+	return m, tea.Batch(m.spinner.Tick, m.startRAGCmd(ctx, q))
 }
 
 func (m *model) resize(w tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
