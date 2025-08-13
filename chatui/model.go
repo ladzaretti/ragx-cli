@@ -301,16 +301,22 @@ func (m *model) View() string {
 		modeLabel, legendItemStyle = "leader", leaderStatusStyle
 	}
 
-	footerContent := lipgloss.JoinHorizontal(
-		lipgloss.Left,
+	footerItems := []string{
 		legendItemStyle.Render(strings.ToUpper(modeLabel)),
-	)
-
-	if m.lastErr != "" {
-		footerContent = lipgloss.JoinHorizontal(lipgloss.Left, footerContent, errorStatusStyle.Render(m.lastErr))
 	}
 
-	status := barStyle.Width(m.viewport.Width + m.modelList.Width()).Render(footerContent)
+	if m.lastErr != "" {
+		footerItems = append(footerItems, errorStatusStyle.Render(m.lastErr))
+	} else {
+		footerItems = append(footerItems,
+			chip(selectedModelStatusStyle, m.selectedModel, 28),
+			chip(embedSelectedModelStatusStyle, m.embeddingModel, 22),
+		)
+	}
+
+	status := barStyle.
+		Width(m.viewport.Width + m.modelList.Width()).
+		Render(lipgloss.JoinHorizontal(lipgloss.Left, footerItems...))
 
 	var b strings.Builder
 
@@ -329,6 +335,18 @@ func (m *model) View() string {
 	b.WriteString(status)
 
 	return b.String()
+}
+
+func chip(style lipgloss.Style, s string, max int) string {
+	if max > 0 && len(s) > max {
+		if max <= 1 {
+			return style.Render("...")
+		}
+
+		s = s[:max-1] + "..."
+	}
+
+	return style.Render(s)
 }
 
 // handleKey routes key events based on focus.
