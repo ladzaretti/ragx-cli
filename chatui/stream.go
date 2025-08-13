@@ -44,7 +44,7 @@ func (m *model) startRAGCmd(ctx context.Context, query string) tea.Cmd {
 		vdb      = m.vecdb
 		llmModel = m.selectedModel
 		embModel = m.embeddingModel
-		topK     = 10
+		topK     = m.topK
 	)
 
 	return func() tea.Msg {

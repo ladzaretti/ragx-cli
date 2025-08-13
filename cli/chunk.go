@@ -142,7 +142,7 @@ func chunkFiles(ctx context.Context, io *genericclioptions.IOStreams, paths []st
 
 		chunks, err := chunkFile(path, chunkSize, overlap)
 		if err != nil {
-			io.Warnf("chunk file: %v", err)
+			io.Warnf("chunk file: %v\n", err)
 			continue
 		}
 
@@ -190,5 +190,5 @@ func totalChunks(chunkedFiles []*fileChunks) (n int) {
 	return n
 }
 
-// FIXME: make the model select popup based
-// 	- add a status indication with the current model selected instead.
+// TODO1: make the model select popup based
+// TODO2: add a status indication with the current model selected instead.

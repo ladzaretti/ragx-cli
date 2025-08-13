@@ -41,6 +41,7 @@ type model struct {
 	chat           *llm.ChatSession
 	client         *llm.Client
 	vecdb          *vecdb.VectorDB
+	topK           int
 	selectedModel  string
 	embeddingModel string
 
@@ -119,7 +120,7 @@ func (m *model) focus(f focus) {
 }
 
 // New creates a new [model].
-func New(client *llm.Client, chat *llm.ChatSession, vecdb *vecdb.VectorDB, models []string, chatModel string, embeddingModel string) *model {
+func New(client *llm.Client, chat *llm.ChatSession, vecdb *vecdb.VectorDB, topK int, models []string, chatModel string, embeddingModel string) *model {
 	ta := textarea.New()
 	ta.Placeholder = "Ask anything\n(Press Ctrl+S to submit)"
 	ta.Focus()
@@ -172,6 +173,7 @@ func New(client *llm.Client, chat *llm.ChatSession, vecdb *vecdb.VectorDB, model
 		client:         client,
 		chat:           chat,
 		vecdb:          vecdb,
+		topK:           topK,
 		embeddingModel: embeddingModel,
 		viewport:       viewport.New(0, 0),
 		modelList:      lm,

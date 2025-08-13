@@ -8,11 +8,14 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"time"
 
 	"github.com/ladzaretti/ragrat/clierror"
 	"github.com/ladzaretti/ragrat/genericclioptions"
 	"github.com/ladzaretti/ragrat/llm"
 	"github.com/ladzaretti/ragrat/vecdb"
+	"golang.org/x/sync/errgroup"
+	"golang.org/x/sync/semaphore"
 
 	"github.com/spf13/cobra"
 )
@@ -28,15 +31,20 @@ var (
 )
 
 const (
+	embedConcurrency = 8
+	embedBatchSize   = 64
+)
+
+const (
 	appName                  = "ragrat"
 	envConfigPathKeyOverride = "RAGRAT_CONFIG_PATH"
 	defaultBaseURL           = "http://localhost:11434/v1"
 	defaultConfigName        = ".ragrat.toml"
 	defaultLogFilename       = ".log"
 	defaultLogLevel          = "info"
-	defaultChunkSize         = 2000
-	defaultOverlap           = 200
-	defaultTopK              = 20
+	defaultChunkSize         = 600
+	defaultOverlap           = 60
+	defaultTopK              = 10
 )
 
 type cleanupFunc func() error
@@ -183,6 +191,11 @@ func (o *DefaultRAGOptions) prepareLLMEnvironment(ctx context.Context, _ ...stri
 }
 
 func (o *DefaultRAGOptions) embed(ctx context.Context, args ...string) error {
+	defer func(start time.Time) {
+		elapsed := time.Since(start)
+		o.Infof("embedding took %s\n", elapsed.String())
+	}(time.Now())
+
 	discovered, err := discover(args, o.matchREs)
 	if err != nil {
 		return err
@@ -196,29 +209,72 @@ func (o *DefaultRAGOptions) embed(ctx context.Context, args ...string) error {
 		return err
 	}
 
-	o.Infof("discovered %d files, produced %d chunks", len(chunkedFiles), totalChunks(chunkedFiles))
+	o.Infof("discovered %d files, produced %d chunks\n", len(chunkedFiles), totalChunks(chunkedFiles))
+
+	return o.embedAll(ctx, chunkedFiles)
+}
+
+func (o *DefaultRAGOptions) embedAll(ctx context.Context, chunkedFiles []*fileChunks) error {
+	g, ctx := errgroup.WithContext(ctx)
+	sem := semaphore.NewWeighted(embedConcurrency)
 
 	for _, cf := range chunkedFiles {
-		req := llm.EmbedBatchRequest{Input: cf.chunks, Model: o.configOptions.resolved.Embedding.EmbeddingModel}
+		if err := sem.Acquire(ctx, 1); err != nil {
+			break
+		}
+
+		g.Go(func() error {
+			defer sem.Release(1)
+			return o.embedFile(ctx, cf)
+		})
+	}
+
+	return g.Wait()
+}
+
+func (o *DefaultRAGOptions) embedFile(ctx context.Context, cf *fileChunks) error {
+	n := len(cf.chunks)
+
+	for i := 0; i < n; i += embedBatchSize {
+		end := min(i+embedBatchSize, n)
+
+		req := llm.EmbedBatchRequest{
+			Input: cf.chunks[i:end],
+			Model: o.configOptions.resolved.Embedding.EmbeddingModel,
+		}
 
 		res, err := o.llmOptions.client.EmbedBatch(ctx, req)
 		if err != nil {
-			return err
+			return fmt.Errorf("embed batch [%d:%d]: %w", i, end, err)
 		}
 
-		embedded := make([]vecdb.Chunk, 0, len(cf.chunks))
+		if want, got := end-i, len(res.Vectors); want != got {
+			return fmt.Errorf("embed batch [%d:%d]: want %d, got %d vectors",
+				i, end, want, got)
+		}
 
-		for i, vec := range res.Vectors {
+		embedded := make([]vecdb.Chunk, 0, len(res.Vectors))
+
+		for j, vec := range res.Vectors {
 			vecChunk := vecdb.Chunk{
-				Content: cf.chunks[i],
+				Content: cf.chunks[i+j],
 				Vec:     toFloat32Slice(vec),
-				Meta:    vecdb.Meta{Path: cf.path, Index: i},
+				Meta:    vecdb.Meta{Path: cf.path, Index: i + j},
 			}
 			embedded = append(embedded, vecChunk)
 		}
 
 		if err := o.llmOptions.vectordb.Insert(embedded); err != nil {
-			return err
+			return fmt.Errorf("vectordb insert %q [%d:%d]: %w", cf.path, i, end, err)
+		}
+
+		o.Infof(
+			"embedded batch [%d:%d] of %d for %q\n",
+			i, end, n, cf.path,
+		)
+
+		if end == n {
+			break
 		}
 	}
 

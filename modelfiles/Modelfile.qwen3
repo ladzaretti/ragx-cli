@@ -1,0 +1,2 @@
+FROM qwen3:8b
+PARAMETER num_thread 20

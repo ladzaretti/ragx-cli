@@ -17,15 +17,18 @@ var ErrInvalidModel = errors.New("invalid model selected")
 type TUIOptions struct {
 	*genericclioptions.StdioOptions
 	*llmOptions
+
+	config *ConfigOptions
 }
 
 var _ genericclioptions.CmdOptions = &TUIOptions{}
 
 // NewTUIOptions initializes the options struct.
-func NewTUIOptions(stdio *genericclioptions.StdioOptions, llm *llmOptions) *TUIOptions {
+func NewTUIOptions(stdio *genericclioptions.StdioOptions, llm *llmOptions, config *ConfigOptions) *TUIOptions {
 	return &TUIOptions{
 		StdioOptions: stdio,
 		llmOptions:   llm,
+		config:       config,
 	}
 }
 
@@ -39,6 +42,7 @@ func (o *TUIOptions) Run(_ context.Context, _ ...string) error {
 			o.client,
 			o.session,
 			o.vectordb,
+			o.config.resolved.Embedding.TopK,
 			o.models,
 			o.selectedModel,
 			o.embeddingModel,
@@ -58,6 +62,7 @@ func NewCmdTUI(defaults *DefaultRAGOptions) *cobra.Command {
 	o := NewTUIOptions(
 		defaults.StdioOptions,
 		defaults.llmOptions,
+		defaults.configOptions,
 	)
 
 	cmd := &cobra.Command{
