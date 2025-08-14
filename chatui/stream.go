@@ -2,20 +2,13 @@ package chatui
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"io"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/ladzaretti/ragrat/cli/prompt"
 	"github.com/ladzaretti/ragrat/llm"
-	"github.com/ladzaretti/ragrat/vecdb"
 )
 
-type chunk struct {
-	err     error
-	content string
-}
+type chunk = prompt.Chunk
 
 type streamChunk struct {
 	chunk
@@ -58,9 +51,9 @@ func (m *model) startRAGCmd(ctx context.Context, query string) tea.Cmd {
 			return ragErr{err}
 		}
 
-		prompt := prompt.BuildUserPrompt(query, hits, decodeMeta)
+		p := prompt.BuildUserPrompt(query, hits, prompt.DecodeMeta)
 
-		ch := sendStream(ctx, chat, llmModel, prompt)
+		ch := prompt.SendStream(ctx, chat, llmModel, p)
 
 		return ragReady{ch: ch}
 	}
@@ -74,43 +67,4 @@ func toFloat32Slice(src []float64) []float32 {
 	}
 
 	return dst
-}
-
-// sendPrompt starts a streaming request and wires chunks back to [model.Update].
-func sendStream(ctx context.Context, s *llm.ChatSession, model, prompt string) <-chan chunk {
-	ch := make(chan chunk)
-
-	go func() {
-		defer close(ch)
-
-		stream, err := s.SendStreaming(ctx, model, prompt)
-		if err != nil {
-			ch <- chunk{err: err}
-			return
-		}
-
-		for res, err := range stream {
-			if err != nil {
-				ch <- chunk{err: fmt.Errorf("llm stream: %w", err)}
-				return
-			}
-
-			ch <- chunk{content: res.Content}
-		}
-
-		ch <- chunk{err: io.EOF}
-	}()
-
-	return ch
-}
-
-func decodeMeta(raw json.RawMessage) (source string, id int) {
-	meta, err := vecdb.DecodeMeta(raw)
-	if err != nil {
-		return
-	}
-
-	source, id = meta.Path, meta.Index
-
-	return
 }

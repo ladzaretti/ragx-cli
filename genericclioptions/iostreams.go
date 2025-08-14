@@ -56,6 +56,11 @@ func (io *IOStreams) SetLevel(l slog.Level) {
 	io.level = l
 }
 
+// Print writes a general, unprefixed message to the standard output stream.
+func (io *IOStreams) Print(s string) {
+	fmt.Fprint(io.out, s)
+}
+
 // Printf writes a general, unprefixed formatted message to the standard output stream.
 func (io *IOStreams) Printf(format string, args ...any) {
 	fmt.Fprintf(io.out, format, args...)

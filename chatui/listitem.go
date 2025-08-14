@@ -42,5 +42,5 @@ func (simpleDelegate) Render(w io.Writer, m list.Model, index int, it list.Item)
 		style = selectedItemStyle
 	}
 
-	fmt.Fprint(w, style.Render(prefix+name)) //nolint:errcheck
+	fmt.Fprint(w, style.Render(prefix+name))
 }

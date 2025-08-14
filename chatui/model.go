@@ -226,11 +226,11 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:cyclop
 
 		m.loading = false
 
-		if msg.err != nil {
+		if msg.Err != nil {
 			m.reasoning, m.reasoningDone = false, false
 
 			switch {
-			case errors.Is(msg.err, io.EOF):
+			case errors.Is(msg.Err, io.EOF):
 				if m.cancel != nil {
 					m.cancel()
 					m.cancel = nil
@@ -239,26 +239,26 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:cyclop
 				m.writeHistory(m.responseBuilder.String())
 				m.responseBuilder.Reset()
 			default:
-				m.lastErr = strings.ToUpper(msg.err.Error())
+				m.lastErr = strings.ToUpper(msg.Err.Error())
 				m.reasoningBuilder.Reset()
 			}
 
 			return m, nil
 		}
 
-		switch strings.TrimSpace(msg.content) {
+		switch strings.TrimSpace(msg.Content) {
 		case reasoningStartTag:
 			m.reasoning = true
 		case reasoningEndTag:
 			m.reasoning, m.reasoningDone = false, true
 			m.reasoningBuilder.Reset()
 		default:
-			if m.reasoningDone && strings.TrimSpace(msg.content) == "" {
+			if m.reasoningDone && strings.TrimSpace(msg.Content) == "" {
 				m.reasoningDone = false
 				return m, waitChunk(msg.ch)
 			}
 
-			m.writeResponseChunk(msg.content)
+			m.writeResponseChunk(msg.Content)
 			m.updateViewport()
 		}
 

@@ -4,12 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/spinner"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/ladzaretti/ragrat/cli/prompt"
 	"github.com/ladzaretti/ragrat/clierror"
 	"github.com/ladzaretti/ragrat/genericclioptions"
 	"github.com/ladzaretti/ragrat/llm"
@@ -47,6 +52,11 @@ const (
 	defaultTopK              = 10
 )
 
+const (
+	reasoningStartTag = "<think>"
+	reasoningEndTag   = "</think>"
+)
+
 type cleanupFunc func() error
 
 type llmOptions struct {
@@ -56,6 +66,7 @@ type llmOptions struct {
 	models         []string
 	selectedModel  string
 	embeddingModel string
+	topK           int
 }
 
 var _ genericclioptions.BaseOptions = &llmOptions{}
@@ -175,7 +186,9 @@ func (o *DefaultRAGOptions) prepareLLMEnvironment(ctx context.Context, _ ...stri
 		return errf("llm list models: %v", err)
 	}
 
-	if err := validateSelectedModels(m, o.llmOptions.selectedModel, o.configOptions.resolved.Embedding.EmbeddingModel); err != nil {
+	embeddingModel, topK := o.configOptions.resolved.Embedding.EmbeddingModel, o.configOptions.resolved.Embedding.TopK
+
+	if err := validateSelectedModels(m, o.llmOptions.selectedModel, embeddingModel); err != nil {
 		return err
 	}
 
@@ -186,6 +199,7 @@ func (o *DefaultRAGOptions) prepareLLMEnvironment(ctx context.Context, _ ...stri
 
 	o.llmOptions.models = m
 	o.llmOptions.vectordb = v
+	o.llmOptions.topK = topK
 
 	return nil
 }
@@ -193,7 +207,7 @@ func (o *DefaultRAGOptions) prepareLLMEnvironment(ctx context.Context, _ ...stri
 func (o *DefaultRAGOptions) embed(ctx context.Context, args ...string) error {
 	defer func(start time.Time) {
 		elapsed := time.Since(start)
-		o.Infof("embedding took %s\n", elapsed.String())
+		o.Debugf("embedding took %s\n", elapsed.String())
 	}(time.Now())
 
 	discovered, err := discover(args, o.matchREs)
@@ -209,7 +223,7 @@ func (o *DefaultRAGOptions) embed(ctx context.Context, args ...string) error {
 		return err
 	}
 
-	o.Infof("discovered %d files, produced %d chunks\n", len(chunkedFiles), totalChunks(chunkedFiles))
+	o.Debugf("discovered %d files, produced %d chunks\n", len(chunkedFiles), totalChunks(chunkedFiles))
 
 	return o.embedAll(ctx, chunkedFiles)
 }
@@ -268,7 +282,7 @@ func (o *DefaultRAGOptions) embedFile(ctx context.Context, cf *fileChunks) error
 			return fmt.Errorf("vectordb insert %q [%d:%d]: %w", cf.path, i, end, err)
 		}
 
-		o.Infof(
+		o.Debugf(
 			"embedded batch [%d:%d] of %d for %q\n",
 			i, end, n, cf.path,
 		)
@@ -291,10 +305,117 @@ func toFloat32Slice(src []float64) (f32 []float32) {
 	return f32
 }
 
-func (o *DefaultRAGOptions) RunQuery(_ context.Context, _ ...string) error {
+type spinnerModel struct {
+	spinner spinner.Model
+}
+
+func newSpinnerModel() spinnerModel {
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+
+	return spinnerModel{spinner: s}
+}
+
+type stopSpinner struct{}
+
+func (m spinnerModel) Init() tea.Cmd { return m.spinner.Tick }
+
+func (m spinnerModel) View() string { return m.spinner.View() }
+
+func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		if msg.Type == tea.KeyCtrlC {
+			return m, tea.Quit
+		}
+
+	case stopSpinner:
+		return m, tea.Quit
+	}
+
+	var cmd tea.Cmd
+
+	m.spinner, cmd = m.spinner.Update(msg)
+
+	return m, cmd
+}
+
+func (o *DefaultRAGOptions) RunQuery(ctx context.Context, _ ...string) error {
 	if o.query == "" {
 		return ErrMissingQuery
 	}
+
+	spinner := tea.NewProgram(newSpinnerModel())
+	go func() { _, _ = spinner.Run() }()
+
+	var (
+		selectedModel  = o.llmOptions.selectedModel
+		embeddingModel = o.llmOptions.embeddingModel
+		topK           = o.configOptions.resolved.Embedding.TopK
+	)
+
+	q, err := o.llmOptions.client.Embed(ctx, llm.EmbedRequest{
+		Input: o.query,
+		Model: embeddingModel,
+	})
+	if err != nil {
+		return err
+	}
+
+	hits, err := o.llmOptions.vectordb.SearchKNN(toFloat32Slice(q.Vector), topK)
+	if err != nil {
+		return err
+	}
+
+	p := prompt.BuildUserPrompt(o.query, hits, prompt.DecodeMeta)
+	ch := prompt.SendStream(ctx, o.llmOptions.session, selectedModel, p)
+
+	reasoning := false
+
+	var chunk prompt.Chunk
+
+loop:
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case c, ok := <-ch:
+			if !ok {
+				break loop
+			}
+
+			chunk = c
+		}
+
+		if chunk.Err != nil {
+			spinner.Send(stopSpinner{})
+
+			if errors.Is(chunk.Err, io.EOF) {
+				break
+			}
+
+			return chunk.Err
+		}
+
+		switch strings.TrimSpace(chunk.Content) {
+		case reasoningStartTag:
+			reasoning = true
+		case reasoningEndTag:
+			reasoning = false
+			continue
+		default:
+		}
+
+		if reasoning {
+			continue
+		}
+
+		spinner.Send(stopSpinner{})
+
+		o.Print(chunk.Content)
+	}
+
+	o.Print("\n")
 
 	return nil
 }

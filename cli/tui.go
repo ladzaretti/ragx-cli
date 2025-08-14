@@ -42,7 +42,7 @@ func (o *TUIOptions) Run(_ context.Context, _ ...string) error {
 			o.client,
 			o.session,
 			o.vectordb,
-			o.config.resolved.Embedding.TopK,
+			o.topK,
 			o.models,
 			o.selectedModel,
 			o.embeddingModel,
