@@ -189,6 +189,3 @@ func totalChunks(chunkedFiles []*fileChunks) (n int) {
 
 	return n
 }
-
-// TODO1: make the model select popup based
-// TODO2: add a status indication with the current model selected instead.

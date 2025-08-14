@@ -56,6 +56,8 @@ var (
 	selectedModelStatusStyle      = lipgloss.NewStyle().Background(lipgloss.Color(mochaPeach)).Foreground(lipgloss.Color(mochaCrust)).Bold(true).Padding(0, 1)
 	embedSelectedModelStatusStyle = lipgloss.NewStyle().Background(lipgloss.Color(mochaTeal)).Foreground(lipgloss.Color(mochaCrust)).Bold(true).Padding(0, 1)
 
+	modalFrameStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(mochaText)).Padding(1, 2)
+
 	barStyle = lipgloss.NewStyle().
 			Background(lipgloss.Color(mochaMantle)).
 			Foreground(lipgloss.Color(mochaText)).

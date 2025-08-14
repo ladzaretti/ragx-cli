@@ -64,6 +64,7 @@ type model struct {
 	// layout
 
 	width         int
+	height        int
 	listWidth     int
 	legendHeight  int
 	legendWrapped string
@@ -194,7 +195,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:cyclop
 		return m.handleKey(msg)
 
 	case tea.WindowSizeMsg:
-		m.width = msg.Width
+		m.width, m.height = msg.Width, msg.Height
 		return m.resize(msg)
 
 	case spinner.TickMsg:
@@ -290,11 +291,11 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:cyclop
 
 func (m *model) View() string {
 	leftSide := lipgloss.JoinVertical(lipgloss.Left,
-		asciiComponentView, // or asciiComponent{}.View()
+		asciiComponentView,
 		m.viewport.View(),
 	)
 
-	mainArea := lipgloss.JoinHorizontal(lipgloss.Top, leftSide, m.modelList.View())
+	main := leftSide
 
 	modeLabel, legendItemStyle := m.currentFocus.String(), m.currentFocus.style()
 	if m.leaderActive {
@@ -309,18 +310,17 @@ func (m *model) View() string {
 		footerItems = append(footerItems, errorStatusStyle.Render(m.lastErr))
 	} else {
 		footerItems = append(footerItems,
-			chip(selectedModelStatusStyle, m.selectedModel, 28),
-			chip(embedSelectedModelStatusStyle, m.embeddingModel, 22),
+			truncate(selectedModelStatusStyle, m.selectedModel, 28),
+			truncate(embedSelectedModelStatusStyle, m.embeddingModel, 22),
 		)
 	}
 
-	status := barStyle.
-		Width(m.viewport.Width + m.modelList.Width()).
+	status := barStyle.Width(m.width).
 		Render(lipgloss.JoinHorizontal(lipgloss.Left, footerItems...))
 
 	var b strings.Builder
 
-	b.WriteString(mainArea)
+	b.WriteString(main)
 	b.WriteString("\n")
 
 	if m.loading {
@@ -334,19 +334,11 @@ func (m *model) View() string {
 	b.WriteString("\n")
 	b.WriteString(status)
 
-	return b.String()
-}
-
-func chip(style lipgloss.Style, s string, max int) string {
-	if max > 0 && len(s) > max {
-		if max <= 1 {
-			return style.Render("...")
-		}
-
-		s = s[:max-1] + "..."
+	if m.currentFocus == focusModelList {
+		return m.renderModelPopup()
 	}
 
-	return style.Render(s)
+	return b.String()
 }
 
 // handleKey routes key events based on focus.
@@ -616,6 +608,43 @@ func (m *model) legend() string {
 			legendItem("^C", "QUIT"),
 		)
 	}
+}
+
+func (m *model) renderModelPopup() string {
+	w, h := m.width, m.height
+
+	listW := clamp(30, 54, w-12)
+	listH := clamp(8, 16, h-8)
+
+	m.modelList.SetSize(listW, listH)
+
+	modal := modalFrameStyle.Render(m.modelList.View())
+
+	return lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, modal)
+}
+
+func clamp(minV, maxV, v int) int {
+	if v < minV {
+		return minV
+	}
+
+	if v > maxV {
+		return maxV
+	}
+
+	return v
+}
+
+func truncate(style lipgloss.Style, s string, maxl int) string {
+	if maxl > 0 && len(s) > maxl {
+		if maxl <= 1 {
+			return style.Render("...")
+		}
+
+		s = s[:maxl-1] + "..."
+	}
+
+	return style.Render(s)
 }
 
 func (m *model) ensureHistoryNewline() {

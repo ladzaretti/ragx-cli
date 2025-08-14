@@ -12,7 +12,7 @@ import (
 const name = "ragrat"
 
 // DefaultSystemPrompt is the base, terminal first system prompt for a ragrat cli.
-const DefaultSystemPrompt = `You are {{app_name}}, a terminal-first assistant that answers strictly from the provided context chunks.
+const DefaultSystemPrompt = `You are ` + name + `, a terminal-first assistant that answers strictly from the provided context chunks.
 
 GROUNDING & RETRIEVAL
 - You will receive a CONTEXT block with one or more CHUNK entries.
