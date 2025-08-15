@@ -125,13 +125,13 @@ func discover(files []string, matchREs []*regexp.Regexp) ([]string, error) {
 	return seen, errors.Join(errs...)
 }
 
-type fileChunks struct {
-	path   string
+type dataChunks struct {
+	source string
 	chunks []string
 }
 
-func chunkFiles(ctx context.Context, io *genericclioptions.IOStreams, paths []string, chunkSize, overlap int) ([]*fileChunks, error) {
-	chunked := make([]*fileChunks, 0, len(paths))
+func chunkFiles(ctx context.Context, io *genericclioptions.IOStreams, paths []string, chunkSize, overlap int) ([]*dataChunks, error) {
+	chunked := make([]*dataChunks, 0, len(paths))
 
 	for _, path := range paths {
 		select {
@@ -152,7 +152,7 @@ func chunkFiles(ctx context.Context, io *genericclioptions.IOStreams, paths []st
 	return chunked, nil
 }
 
-func chunkFile(path string, chunkSize, overlap int) (*fileChunks, error) {
+func chunkFile(path string, chunkSize, overlap int) (*dataChunks, error) {
 	b, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
 		return nil, fmt.Errorf("read file %q: %w", path, err)
@@ -175,14 +175,14 @@ func chunkFile(path string, chunkSize, overlap int) (*fileChunks, error) {
 		return nil, fmt.Errorf("skipping empty file: %q", path)
 	}
 
-	return &fileChunks{
-			path:   path,
+	return &dataChunks{
+			source: path,
 			chunks: chunks,
 		},
 		nil
 }
 
-func totalChunks(chunkedFiles []*fileChunks) (n int) {
+func totalChunks(chunkedFiles []*dataChunks) (n int) {
 	for _, cf := range chunkedFiles {
 		n += len(cf.chunks)
 	}

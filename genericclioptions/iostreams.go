@@ -9,9 +9,9 @@ import (
 )
 
 type IOStreams struct {
-	in     FdReader
-	out    io.Writer
-	errOut io.Writer
+	In     FdReader
+	Out    io.Writer
+	ErrOut io.Writer
 
 	level slog.Level
 }
@@ -19,9 +19,9 @@ type IOStreams struct {
 // NewDefaultIOStreams returns the default IOStreams (using os.Stdin, os.Stdout, os.Stderr).
 func NewDefaultIOStreams() *IOStreams {
 	return &IOStreams{
-		in:     os.Stdin,
-		out:    os.Stdout,
-		errOut: os.Stderr,
+		In:     os.Stdin,
+		Out:    os.Stdout,
+		ErrOut: os.Stderr,
 	}
 }
 
@@ -34,9 +34,9 @@ func NewTestIOStreams(r *TestFdReader) (iostream *IOStreams, in *TestFdReader, o
 	out, errOut = &bytes.Buffer{}, &bytes.Buffer{}
 
 	iostream = &IOStreams{
-		in:     in,
-		out:    out,
-		errOut: errOut,
+		In:     in,
+		Out:    out,
+		ErrOut: errOut,
 	}
 
 	return
@@ -46,9 +46,9 @@ func NewTestIOStreams(r *TestFdReader) (iostream *IOStreams, in *TestFdReader, o
 // and discards both output and error output.
 func NewTestIOStreamsDiscard(in *TestFdReader) *IOStreams {
 	return &IOStreams{
-		in:     in,
-		out:    io.Discard,
-		errOut: io.Discard,
+		In:     in,
+		Out:    io.Discard,
+		ErrOut: io.Discard,
 	}
 }
 
@@ -58,39 +58,39 @@ func (io *IOStreams) SetLevel(l slog.Level) {
 
 // Print writes a general, unprefixed message to the standard output stream.
 func (io *IOStreams) Print(s string) {
-	fmt.Fprint(io.out, s)
+	fmt.Fprint(io.Out, s)
 }
 
 // Printf writes a general, unprefixed formatted message to the standard output stream.
 func (io *IOStreams) Printf(format string, args ...any) {
-	fmt.Fprintf(io.out, format, args...)
+	fmt.Fprintf(io.Out, format, args...)
 }
 
 // Debugf writes formatted debug output to the error stream.
 // if Verbose is enabled.
 func (io *IOStreams) Debugf(format string, args ...any) {
 	if io.level <= slog.LevelDebug {
-		fmt.Fprintf(io.errOut, "DEBUG "+format, args...)
+		fmt.Fprintf(io.ErrOut, "DEBUG "+format, args...)
 	}
 }
 
 // Infof writes a formatted message to the standard output stream.
 func (io *IOStreams) Infof(format string, args ...any) {
 	if io.level <= slog.LevelInfo {
-		fmt.Fprintf(io.out, "INFO "+format, args...)
+		fmt.Fprintf(io.Out, "INFO "+format, args...)
 	}
 }
 
 // Warnf writes a formatted message to the standard output stream.
 func (io *IOStreams) Warnf(format string, args ...any) {
 	if io.level <= slog.LevelWarn {
-		fmt.Fprintf(io.out, "WARN "+format, args...)
+		fmt.Fprintf(io.Out, "WARN "+format, args...)
 	}
 }
 
 // Errorf writes a formatted message to the error stream.
 func (io *IOStreams) Errorf(format string, args ...any) {
 	if io.level <= slog.LevelError {
-		fmt.Fprintf(io.errOut, "WARN "+format, args...)
+		fmt.Fprintf(io.ErrOut, "WARN "+format, args...)
 	}
 }

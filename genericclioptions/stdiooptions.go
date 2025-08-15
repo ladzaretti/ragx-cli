@@ -14,10 +14,10 @@ import (
 type StdioOptions struct {
 	*IOStreams
 
-	nonInteractive bool
-	level          slog.Level
-
 	Logger *slog.Logger
+	Piped  bool
+
+	level slog.Level
 }
 
 var _ BaseOptions = &StdioOptions{}
@@ -27,7 +27,7 @@ type StdioOption func(*StdioOptions)
 func WithIn(r FdReader) StdioOption {
 	return func(o *StdioOptions) {
 		if r != nil {
-			o.in = r
+			o.In = r
 		}
 	}
 }
@@ -35,7 +35,7 @@ func WithIn(r FdReader) StdioOption {
 func WithOut(w io.Writer) StdioOption {
 	return func(o *StdioOptions) {
 		if w != nil {
-			o.out = w
+			o.Out = w
 		}
 	}
 }
@@ -43,7 +43,7 @@ func WithOut(w io.Writer) StdioOption {
 func WithErr(w io.Writer) StdioOption {
 	return func(o *StdioOptions) {
 		if w != nil {
-			o.errOut = w
+			o.ErrOut = w
 		}
 	}
 }
@@ -79,15 +79,14 @@ func NewStdioOptions() *StdioOptions {
 
 // Complete sets default values, e.g., enabling Stdin if piped input is detected.
 func (o *StdioOptions) Complete() error {
-	if !o.nonInteractive {
-		fi, err := o.in.Stat()
+	if !o.Piped {
+		fi, err := o.In.Stat()
 		if err != nil {
 			return fmt.Errorf("stat input: %v", err)
 		}
 
 		if !isatty(fi) {
-			o.Logger.Debug("input is piped or redirected; Enabling non-interactive mode.\n")
-			o.nonInteractive = true
+			o.Piped = true
 		}
 	}
 
@@ -96,12 +95,12 @@ func (o *StdioOptions) Complete() error {
 
 // Validate ensures the input mode (Stdin or interactive) is used appropriately.
 func (o *StdioOptions) Validate() error {
-	fi, err := o.in.Stat()
+	fi, err := o.In.Stat()
 	if err != nil {
 		return fmt.Errorf("stat input: %v", err)
 	}
 
-	if o.nonInteractive && isatty(fi) {
+	if o.Piped && isatty(fi) {
 		return errors.New("non-interactive mode requires piped or redirected input")
 	}
 

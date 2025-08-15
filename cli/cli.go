@@ -6,10 +6,13 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -28,11 +31,13 @@ import (
 var Version = "0.0.0"
 
 var (
-	ErrMissingQuery          = errors.New("missing required --query flag")
-	ErrMissingLLMModel       = errors.New("missing LLM model")
-	ErrMissingEmbeddingModel = errors.New("missing embedding model")
-	ErrMissingDimension      = errors.New("missing or invalid embedding dimension")
-	ErrInvalidSelectedModel  = errors.New("selected model not found in available models")
+	ErrMissingQuery           = errors.New("missing required --query flag")
+	ErrMissingLLMModel        = errors.New("missing LLM model")
+	ErrMissingEmbeddingModel  = errors.New("missing embedding model")
+	ErrMissingDimension       = errors.New("missing or invalid embedding dimension")
+	ErrInvalidSelectedModel   = errors.New("selected model not found in available models")
+	ErrNoEmbedInput           = errors.New("no input provided for embedding")
+	ErrConflictingEmbedInputs = errors.New("cannot embed from both piped input and file arguments")
 )
 
 const (
@@ -205,6 +210,46 @@ func (o *DefaultRAGOptions) prepareLLMEnvironment(ctx context.Context, _ ...stri
 }
 
 func (o *DefaultRAGOptions) embed(ctx context.Context, args ...string) error {
+	switch {
+	case o.Piped && len(args) > 0:
+		return ErrConflictingEmbedInputs
+	case o.Piped:
+		return o.embedInput(ctx, args...)
+	case len(args) > 0:
+		return o.discoverAndEmbed(ctx, args...)
+	default:
+	}
+
+	return ErrNoEmbedInput
+}
+
+func (o *DefaultRAGOptions) embedInput(ctx context.Context, _ ...string) error {
+	bs, err := io.ReadAll(o.In)
+	if err != nil {
+		return fmt.Errorf("read piped input: %w", err)
+	}
+
+	chunks, err := ChunkText(string(bs),
+		o.configOptions.resolved.Embedding.ChunkSize,
+		o.configOptions.resolved.Embedding.Overlap,
+	)
+	if err != nil {
+		return fmt.Errorf("chunk piped input: %w", err)
+	}
+
+	dataChunks := &dataChunks{
+		source: "piped-data",
+		chunks: chunks,
+	}
+
+	if err := o.embedData(ctx, dataChunks); err != nil {
+		return fmt.Errorf("embed piped input: %w", err)
+	}
+
+	return nil
+}
+
+func (o *DefaultRAGOptions) discoverAndEmbed(ctx context.Context, args ...string) error {
 	defer func(start time.Time) {
 		elapsed := time.Since(start)
 		o.Debugf("embedding took %s\n", elapsed.String())
@@ -228,7 +273,7 @@ func (o *DefaultRAGOptions) embed(ctx context.Context, args ...string) error {
 	return o.embedAll(ctx, chunkedFiles)
 }
 
-func (o *DefaultRAGOptions) embedAll(ctx context.Context, chunkedFiles []*fileChunks) error {
+func (o *DefaultRAGOptions) embedAll(ctx context.Context, chunkedFiles []*dataChunks) error {
 	g, ctx := errgroup.WithContext(ctx)
 	sem := semaphore.NewWeighted(embedConcurrency)
 
@@ -239,14 +284,14 @@ func (o *DefaultRAGOptions) embedAll(ctx context.Context, chunkedFiles []*fileCh
 
 		g.Go(func() error {
 			defer sem.Release(1)
-			return o.embedFile(ctx, cf)
+			return o.embedData(ctx, cf)
 		})
 	}
 
 	return g.Wait()
 }
 
-func (o *DefaultRAGOptions) embedFile(ctx context.Context, cf *fileChunks) error {
+func (o *DefaultRAGOptions) embedData(ctx context.Context, cf *dataChunks) error {
 	n := len(cf.chunks)
 
 	for i := 0; i < n; i += embedBatchSize {
@@ -273,18 +318,18 @@ func (o *DefaultRAGOptions) embedFile(ctx context.Context, cf *fileChunks) error
 			vecChunk := vecdb.Chunk{
 				Content: cf.chunks[i+j],
 				Vec:     toFloat32Slice(vec),
-				Meta:    vecdb.Meta{Path: cf.path, Index: i + j},
+				Meta:    vecdb.Meta{Source: cf.source, Index: i + j},
 			}
 			embedded = append(embedded, vecChunk)
 		}
 
 		if err := o.llmOptions.vectordb.Insert(embedded); err != nil {
-			return fmt.Errorf("vectordb insert %q [%d:%d]: %w", cf.path, i, end, err)
+			return fmt.Errorf("vectordb insert %q [%d:%d]: %w", cf.source, i, end, err)
 		}
 
 		o.Debugf(
 			"embedded batch [%d:%d] of %d for %q\n",
-			i, end, n, cf.path,
+			i, end, n, cf.source,
 		)
 
 		if end == n {
@@ -344,6 +389,9 @@ func (o *DefaultRAGOptions) RunQuery(ctx context.Context, _ ...string) error {
 	if o.query == "" {
 		return ErrMissingQuery
 	}
+
+	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	defer cancel()
 
 	spinner := tea.NewProgram(newSpinnerModel())
 	go func() { _, _ = spinner.Run() }()
@@ -489,7 +537,7 @@ func NewDefaultRAGCommand(iostreams *genericclioptions.IOStreams, args []string)
 
 	cmd := &cobra.Command{
 		Use:   "ragrat [files]",
-		Args:  cobra.MinimumNArgs(1),
+		Args:  cobra.ArbitraryArgs,
 		Short: "",
 		Long: `ragrat is a terminal based, self-hosted Retrieval-Augmented Generation (RAG) assistant.
 

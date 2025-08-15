@@ -3,8 +3,8 @@ package vecdb
 import "encoding/json"
 
 type Meta struct {
-	Path  string `json:"path,omitempty"`
-	Index int    `json:"index,omitempty"`
+	Source string `json:"path,omitempty"`
+	Index  int    `json:"index,omitempty"`
 }
 
 func DecodeMeta(raw json.RawMessage) (Meta, error) {
