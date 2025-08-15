@@ -15,8 +15,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/ladzaretti/ragrat/cli/prompt"
 	"github.com/ladzaretti/ragrat/clierror"
 	"github.com/ladzaretti/ragrat/genericclioptions"
@@ -52,9 +50,9 @@ const (
 	defaultConfigName        = ".ragrat.toml"
 	defaultLogFilename       = ".log"
 	defaultLogLevel          = "info"
-	defaultChunkSize         = 600
-	defaultOverlap           = 60
-	defaultTopK              = 10
+	defaultChunkSize         = 2000
+	defaultOverlap           = 200
+	defaultTopK              = 20
 )
 
 const (
@@ -210,21 +208,27 @@ func (o *DefaultRAGOptions) prepareLLMEnvironment(ctx context.Context, _ ...stri
 }
 
 func (o *DefaultRAGOptions) embed(ctx context.Context, args ...string) error {
-	switch {
-	case o.Piped && len(args) > 0:
+	if !o.Piped && len(args) == 0 {
+		return ErrNoEmbedInput
+	}
+
+	if o.Piped && len(args) > 0 {
 		return ErrConflictingEmbedInputs
+	}
+
+	switch {
 	case o.Piped:
-		return o.embedInput(ctx, args...)
+		return o.embedInput(ctx, o.In)
 	case len(args) > 0:
 		return o.discoverAndEmbed(ctx, args...)
 	default:
 	}
 
-	return ErrNoEmbedInput
+	return nil
 }
 
-func (o *DefaultRAGOptions) embedInput(ctx context.Context, _ ...string) error {
-	bs, err := io.ReadAll(o.In)
+func (o *DefaultRAGOptions) embedInput(ctx context.Context, r io.Reader) error {
+	bs, err := io.ReadAll(r)
 	if err != nil {
 		return fmt.Errorf("read piped input: %w", err)
 	}
@@ -252,7 +256,7 @@ func (o *DefaultRAGOptions) embedInput(ctx context.Context, _ ...string) error {
 func (o *DefaultRAGOptions) discoverAndEmbed(ctx context.Context, args ...string) error {
 	defer func(start time.Time) {
 		elapsed := time.Since(start)
-		o.Debugf("embedding took %s\n", elapsed.String())
+		o.Logger.Debug("embedding total duration", "duration", elapsed)
 	}(time.Now())
 
 	discovered, err := discover(args, o.matchREs)
@@ -268,7 +272,7 @@ func (o *DefaultRAGOptions) discoverAndEmbed(ctx context.Context, args ...string
 		return err
 	}
 
-	o.Debugf("discovered %d files, produced %d chunks\n", len(chunkedFiles), totalChunks(chunkedFiles))
+	o.Logger.Debug("discovered files", "files", len(chunkedFiles), "chunks", totalChunks(chunkedFiles))
 
 	return o.embedAll(ctx, chunkedFiles)
 }
@@ -327,10 +331,7 @@ func (o *DefaultRAGOptions) embedData(ctx context.Context, cf *dataChunks) error
 			return fmt.Errorf("vectordb insert %q [%d:%d]: %w", cf.source, i, end, err)
 		}
 
-		o.Debugf(
-			"embedded batch [%d:%d] of %d for %q\n",
-			i, end, n, cf.source,
-		)
+		o.Logger.Debug("embedded batch", "range", fmt.Sprintf("[%d:%d]", i, end), "total", n, "source", cf.source)
 
 		if end == n {
 			break
@@ -350,41 +351,6 @@ func toFloat32Slice(src []float64) (f32 []float32) {
 	return f32
 }
 
-type spinnerModel struct {
-	spinner spinner.Model
-}
-
-func newSpinnerModel() spinnerModel {
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-
-	return spinnerModel{spinner: s}
-}
-
-type stopSpinner struct{}
-
-func (m spinnerModel) Init() tea.Cmd { return m.spinner.Tick }
-
-func (m spinnerModel) View() string { return m.spinner.View() }
-
-func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		if msg.Type == tea.KeyCtrlC {
-			return m, tea.Quit
-		}
-
-	case stopSpinner:
-		return m, tea.Quit
-	}
-
-	var cmd tea.Cmd
-
-	m.spinner, cmd = m.spinner.Update(msg)
-
-	return m, cmd
-}
-
 func (o *DefaultRAGOptions) RunQuery(ctx context.Context, _ ...string) error {
 	if o.query == "" {
 		return ErrMissingQuery
@@ -393,8 +359,11 @@ func (o *DefaultRAGOptions) RunQuery(ctx context.Context, _ ...string) error {
 	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	spinner := tea.NewProgram(newSpinnerModel())
-	go func() { _, _ = spinner.Run() }()
+	runSpinner, stopSpinner := newSpinner(cancel, "")
+
+	go runSpinner()
+
+	defer stopSpinner()
 
 	var (
 		selectedModel  = o.llmOptions.selectedModel
@@ -418,28 +387,37 @@ func (o *DefaultRAGOptions) RunQuery(ctx context.Context, _ ...string) error {
 	p := prompt.BuildUserPrompt(o.query, hits, prompt.DecodeMeta)
 	ch := prompt.SendStream(ctx, o.llmOptions.session, selectedModel, p)
 
-	reasoning := false
+	if err := drainStream(ctx, ch, o.Print, stopSpinner); err != nil {
+		return fmt.Errorf("response stream: %w", err)
+	}
 
-	var chunk prompt.Chunk
+	o.Print("\n")
 
-loop:
+	return nil
+}
+
+func drainStream(ctx context.Context, ch <-chan prompt.Chunk, printFunc func(string), stopSpinner func()) error {
+	var (
+		chunk         prompt.Chunk
+		reasoning     = false
+		reasoningDone = false
+	)
+
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case c, ok := <-ch:
 			if !ok {
-				break loop
+				return nil
 			}
 
 			chunk = c
 		}
 
 		if chunk.Err != nil {
-			spinner.Send(stopSpinner{})
-
 			if errors.Is(chunk.Err, io.EOF) {
-				break
+				return nil
 			}
 
 			return chunk.Err
@@ -450,6 +428,8 @@ loop:
 			reasoning = true
 		case reasoningEndTag:
 			reasoning = false
+			reasoningDone = true
+
 			continue
 		default:
 		}
@@ -458,14 +438,18 @@ loop:
 			continue
 		}
 
-		spinner.Send(stopSpinner{})
+		stopSpinner()
 
-		o.Print(chunk.Content)
+		if reasoningDone {
+			reasoningDone = false
+
+			if strings.TrimSpace(chunk.Content) == "" {
+				continue
+			}
+		}
+
+		printFunc(chunk.Content)
 	}
-
-	o.Print("\n")
-
-	return nil
 }
 
 func (o *DefaultRAGOptions) initLogger() (*slog.Logger, error) {
