@@ -5,7 +5,7 @@ BIN_NAME ?= ragrat
 VERSION ?= 0.0.0
 
 # renovate: datasource=github-releases depName=golangci/golangci-lint
-GOLANGCI_VERSION ?= v2.2.2
+GOLANGCI_VERSION ?= v2.4.0
 TEST_ARGS = -v -timeout 40s -coverpkg=./...
 
 PKG_PATH ?= main
