@@ -494,6 +494,7 @@ func IsRetryableError(err error) bool {
 			http.StatusServiceUnavailable,
 			http.StatusGatewayTimeout:
 			return true
+		default:
 		}
 	}
 
