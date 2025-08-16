@@ -14,29 +14,29 @@ import (
 
 var ErrInvalidModel = errors.New("invalid model selected")
 
-type TUIOptions struct {
+type ChatOptions struct {
 	*genericclioptions.StdioOptions
 	*llmOptions
 
 	config *configOptions
 }
 
-var _ genericclioptions.CmdOptions = &TUIOptions{}
+var _ genericclioptions.CmdOptions = &ChatOptions{}
 
-// NewTUIOptions initializes the options struct.
-func NewTUIOptions(stdio *genericclioptions.StdioOptions, llm *llmOptions, config *configOptions) *TUIOptions {
-	return &TUIOptions{
+// NewChatOptions initializes the options struct.
+func NewChatOptions(stdio *genericclioptions.StdioOptions, llm *llmOptions, config *configOptions) *ChatOptions {
+	return &ChatOptions{
 		StdioOptions: stdio,
 		llmOptions:   llm,
 		config:       config,
 	}
 }
 
-func (*TUIOptions) Complete() error { return nil }
+func (*ChatOptions) Complete() error { return nil }
 
-func (*TUIOptions) Validate() error { return nil }
+func (*ChatOptions) Validate() error { return nil }
 
-func (o *TUIOptions) Run(_ context.Context, _ ...string) error {
+func (o *ChatOptions) Run(_ context.Context, _ ...string) error {
 	var (
 		tui = chatui.New(
 			o.client,
@@ -51,24 +51,25 @@ func (o *TUIOptions) Run(_ context.Context, _ ...string) error {
 	)
 
 	if _, err := p.Run(); err != nil {
-		return errf("tui: %v\n", err)
+		return errf("chatui: %v\n", err)
 	}
 
 	return nil
 }
 
-// NewCmdTUI creates the <cmd> cobra command.
-func NewCmdTUI(defaults *DefaultRAGOptions) *cobra.Command {
-	o := NewTUIOptions(
+// NewCmdChat creates the <cmd> cobra command.
+func NewCmdChat(defaults *DefaultRAGOptions) *cobra.Command {
+	o := NewChatOptions(
 		defaults.StdioOptions,
 		defaults.llmOptions,
 		defaults.configOptions,
 	)
 
 	cmd := &cobra.Command{
-		Use:   "tui",
-		Short: "Start the interactive terminal chat UI",
-		Long:  "Launch a terminal interface for chatting with a local or remote LLM.",
+		Use:     "chat",
+		Aliases: []string{"tui"},
+		Short:   "Start the interactive terminal chat UI",
+		Long:    "Launch a terminal interface for chatting with a local or remote LLM.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return clierror.Check(genericclioptions.ExecuteCommand(cmd.Context(), o))
 		},

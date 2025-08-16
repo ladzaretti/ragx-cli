@@ -580,7 +580,7 @@ Configuration is handled via flags or config files.`,
 	cmd.PersistentFlags().StringSliceVarP(&o.matchPatterns, "match", "M", nil, "Glob pattern(s) for matching files (e.g. '*.md', 'data/*.txt')")
 	cmd.PersistentFlags().IntVarP(&o.configOptions.flags.dimensions, "dim", "", 0, "Embedding vector dimension (must match embedding model output)")
 
-	cmd.AddCommand(NewCmdTUI(o))
+	cmd.AddCommand(NewCmdChat(o))
 	cmd.AddCommand(NewCmdConfig(o))
 	cmd.AddCommand(NewCmdListModels(o))
 
