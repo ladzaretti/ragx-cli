@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/ladzaretti/ragrat/cli/prompt"
 	"github.com/ladzaretti/ragrat/clierror"
 	"github.com/ladzaretti/ragrat/genericclioptions"
 
@@ -72,9 +73,11 @@ func (o *configOptions) resolve() error {
 
 	o.resolved.path = cmp.Or(o.flags.configPath, o.fileConfig.path)
 
+	o.resolved.LLM.BaseURL = cmp.Or(os.Getenv("OPENAI_API_BASE"), o.flags.baseURL, o.fileConfig.LLM.BaseURL)
 	o.resolved.LLM.APIKey = cmp.Or(os.Getenv("OPENAI_API_KEY"), o.fileConfig.LLM.APIKey)
-	o.resolved.LLM.BaseURL = cmp.Or(o.flags.baseURL, o.fileConfig.LLM.BaseURL)
-	o.resolved.LLM.Model = cmp.Or(o.flags.model, o.fileConfig.LLM.Model)
+	o.resolved.LLM.Model = cmp.Or(os.Getenv("OPENAI_MODEL"), o.flags.model, o.fileConfig.LLM.Model)
+
+	o.resolved.Prompt.System = cmp.Or(o.fileConfig.Prompt.System, prompt.DefaultSystemPrompt)
 
 	o.resolved.Embedding.EmbeddingModel = cmp.Or(o.flags.embeddingModel, o.fileConfig.Embedding.EmbeddingModel)
 	o.resolved.Embedding.Dimensions = cmp.Or(o.flags.dimensions, o.fileConfig.Embedding.Dimensions)

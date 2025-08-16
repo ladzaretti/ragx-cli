@@ -1,7 +1,5 @@
 // Package llm provides a minimal OpenAI compatible client with chat,
 // completion and embedding helpers.
-//
-// Requires Go 1.22+ for iter/cmp.
 package llm
 
 import (
@@ -22,8 +20,8 @@ import (
 
 var (
 	ErrNoModelSelected         = errors.New("no model specified")
-	ErrEmptyCompletionResponse = errors.New("empty completion response")
 	ErrNoEmbeddingReturned     = errors.New("no embedding returned")
+	ErrEmptyCompletionResponse = errors.New("empty completion response")
 )
 
 // Client implements an open ai api compatible client.
