@@ -216,18 +216,28 @@ func (o *DefaultRAGOptions) embed(ctx context.Context, args ...string) error {
 		return ErrConflictingEmbedInputs
 	}
 
+	ctx, cancel := context.WithCancel(ctx)
+
+	// TODO2: tokenizer for chat history; 4 runes is roughly equal to 1 token
+
+	spinner := newSpinner(cancel, "")
+
+	go spinner.run()
+
+	defer spinner.stop()
+
 	switch {
 	case o.Piped:
-		return o.embedInput(ctx, o.In)
+		return o.embedInput(ctx, spinner.sendStatusWithEllipsis, o.In)
 	case len(args) > 0:
-		return o.discoverAndEmbed(ctx, args...)
+		return o.discoverAndEmbed(ctx, spinner.sendStatus, args...)
 	default:
 	}
 
 	return nil
 }
 
-func (o *DefaultRAGOptions) embedInput(ctx context.Context, r io.Reader) error {
+func (o *DefaultRAGOptions) embedInput(ctx context.Context, sendStatus func(string), r io.Reader) error {
 	bs, err := io.ReadAll(r)
 	if err != nil {
 		return fmt.Errorf("read piped input: %w", err)
@@ -246,6 +256,8 @@ func (o *DefaultRAGOptions) embedInput(ctx context.Context, r io.Reader) error {
 		chunks: chunks,
 	}
 
+	sendStatus("embedding piped data")
+
 	if err := o.embedData(ctx, dataChunks); err != nil {
 		return fmt.Errorf("embed piped input: %w", err)
 	}
@@ -253,7 +265,7 @@ func (o *DefaultRAGOptions) embedInput(ctx context.Context, r io.Reader) error {
 	return nil
 }
 
-func (o *DefaultRAGOptions) discoverAndEmbed(ctx context.Context, args ...string) error {
+func (o *DefaultRAGOptions) discoverAndEmbed(ctx context.Context, status func(string), args ...string) error {
 	defer func(start time.Time) {
 		elapsed := time.Since(start)
 		o.Logger.Debug("embedding total duration", "duration", elapsed)
@@ -274,20 +286,22 @@ func (o *DefaultRAGOptions) discoverAndEmbed(ctx context.Context, args ...string
 
 	o.Logger.Debug("discovered files", "files", len(chunkedFiles), "chunks", totalChunks(chunkedFiles))
 
-	return o.embedAll(ctx, chunkedFiles)
+	return o.embedAll(ctx, status, chunkedFiles)
 }
 
-func (o *DefaultRAGOptions) embedAll(ctx context.Context, chunkedFiles []*dataChunks) error {
+func (o *DefaultRAGOptions) embedAll(ctx context.Context, sendStatus func(string), chunkedFiles []*dataChunks) error {
 	g, ctx := errgroup.WithContext(ctx)
 	sem := semaphore.NewWeighted(embedConcurrency)
 
-	for _, cf := range chunkedFiles {
+	for i, cf := range chunkedFiles {
 		if err := sem.Acquire(ctx, 1); err != nil {
 			break
 		}
 
 		g.Go(func() error {
 			defer sem.Release(1)
+			sendStatus(fmt.Sprintf("embedding [%d/%d] %s", i+1, len(chunkedFiles), cf.source))
+
 			return o.embedData(ctx, cf)
 		})
 	}
@@ -359,17 +373,21 @@ func (o *DefaultRAGOptions) RunQuery(ctx context.Context, _ ...string) error {
 	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	runSpinner, stopSpinner := newSpinner(cancel, "")
+	spinner := newSpinner(cancel, "")
 
-	go runSpinner()
+	go spinner.run()
 
-	defer stopSpinner()
+	defer spinner.stop()
 
 	var (
 		selectedModel  = o.llmOptions.selectedModel
 		embeddingModel = o.llmOptions.embeddingModel
 		topK           = o.configOptions.resolved.Embedding.TopK
 	)
+
+	setStatus := spinner.sendStatusWithEllipsis
+
+	setStatus("embedding query")
 
 	q, err := o.llmOptions.client.Embed(ctx, llm.EmbedRequest{
 		Input: o.query,
@@ -379,15 +397,19 @@ func (o *DefaultRAGOptions) RunQuery(ctx context.Context, _ ...string) error {
 		return err
 	}
 
+	setStatus(fmt.Sprintf("search knn (topK=%d)", topK))
+
 	hits, err := o.llmOptions.vectordb.SearchKNN(toFloat32Slice(q.Vector), topK)
 	if err != nil {
 		return err
 	}
 
+	setStatus("sending to " + selectedModel)
+
 	p := prompt.BuildUserPrompt(o.query, hits, prompt.DecodeMeta)
 	ch := prompt.SendStream(ctx, o.llmOptions.session, selectedModel, p)
 
-	if err := drainStream(ctx, ch, o.Print, stopSpinner); err != nil {
+	if err := drainStream(ctx, ch, o.Print, setStatus, spinner.stop); err != nil {
 		return fmt.Errorf("response stream: %w", err)
 	}
 
@@ -396,12 +418,14 @@ func (o *DefaultRAGOptions) RunQuery(ctx context.Context, _ ...string) error {
 	return nil
 }
 
-func drainStream(ctx context.Context, ch <-chan prompt.Chunk, printFunc func(string), stopSpinner func()) error {
+func drainStream(ctx context.Context, ch <-chan prompt.Chunk, printFunc func(string), setStatus func(string), stopSpinner func()) error {
 	var (
 		chunk         prompt.Chunk
 		reasoning     = false
 		reasoningDone = false
 	)
+
+	setStatus("processing")
 
 	for {
 		select {
@@ -425,6 +449,8 @@ func drainStream(ctx context.Context, ch <-chan prompt.Chunk, printFunc func(str
 
 		switch strings.TrimSpace(chunk.Content) {
 		case reasoningStartTag:
+			setStatus("thinking")
+
 			reasoning = true
 		case reasoningEndTag:
 			reasoning = false
