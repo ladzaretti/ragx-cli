@@ -18,13 +18,13 @@ type TUIOptions struct {
 	*genericclioptions.StdioOptions
 	*llmOptions
 
-	config *ConfigOptions
+	config *configOptions
 }
 
 var _ genericclioptions.CmdOptions = &TUIOptions{}
 
 // NewTUIOptions initializes the options struct.
-func NewTUIOptions(stdio *genericclioptions.StdioOptions, llm *llmOptions, config *ConfigOptions) *TUIOptions {
+func NewTUIOptions(stdio *genericclioptions.StdioOptions, llm *llmOptions, config *configOptions) *TUIOptions {
 	return &TUIOptions{
 		StdioOptions: stdio,
 		llmOptions:   llm,
@@ -42,10 +42,10 @@ func (o *TUIOptions) Run(_ context.Context, _ ...string) error {
 			o.client,
 			o.session,
 			o.vectordb,
-			o.topK,
+			o.config.resolved.Embedding.TopK,
 			o.models,
-			o.selectedModel,
-			o.embeddingModel,
+			o.config.resolved.LLM.Model,
+			o.config.resolved.Embedding.EmbeddingModel,
 		)
 		p = tea.NewProgram(tui, tea.WithAltScreen())
 	)

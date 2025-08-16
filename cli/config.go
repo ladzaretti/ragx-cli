@@ -15,8 +15,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// ConfigOptions holds cli, file, and resolved global configuration.
-type ConfigOptions struct {
+// configOptions holds cli, file, and resolved global configuration.
+type configOptions struct {
 	*genericclioptions.StdioOptions
 
 	flags *Flags
@@ -43,20 +43,20 @@ func (d Duration) String() string { return time.Duration(d).String() }
 
 func (d Duration) MarshalJSON() ([]byte, error) { return json.Marshal(d.String()) }
 
-var _ genericclioptions.CmdOptions = &ConfigOptions{}
+var _ genericclioptions.CmdOptions = &configOptions{}
 
 // NewConfigOptions initializes ConfigOptions with default values.
-func NewConfigOptions(stdio *genericclioptions.StdioOptions) *ConfigOptions {
-	return &ConfigOptions{
+func NewConfigOptions(stdio *genericclioptions.StdioOptions) *configOptions {
+	return &configOptions{
 		StdioOptions: stdio,
 		fileConfig:   newFileConfig(),
 		flags:        &Flags{},
 	}
 }
 
-func (o *ConfigOptions) Resolved() *Config { return o.resolved }
+func (o *configOptions) Resolved() *Config { return o.resolved }
 
-func (o *ConfigOptions) Complete() error {
+func (o *configOptions) Complete() error {
 	c, err := LoadFileConfig(o.flags.configPath)
 	if err != nil {
 		return err
@@ -67,7 +67,7 @@ func (o *ConfigOptions) Complete() error {
 	return o.resolve()
 }
 
-func (o *ConfigOptions) resolve() error {
+func (o *configOptions) resolve() error {
 	o.resolved = o.fileConfig
 
 	o.resolved.path = cmp.Or(o.flags.configPath, o.fileConfig.path)
@@ -86,7 +86,7 @@ func (o *ConfigOptions) resolve() error {
 	return nil
 }
 
-func (o *ConfigOptions) Validate() error {
+func (o *configOptions) Validate() error {
 	if _, err := genericclioptions.ParseLevel(o.resolved.Logging.Level); err != nil {
 		return err
 	}
@@ -94,7 +94,7 @@ func (o *ConfigOptions) Validate() error {
 	return nil
 }
 
-func (*ConfigOptions) Run(context.Context, ...string) error { return nil }
+func (*configOptions) Run(context.Context, ...string) error { return nil }
 
 // NewCmdConfig creates the cobra config command tree.
 func NewCmdConfig(defaults *DefaultRAGOptions) *cobra.Command {

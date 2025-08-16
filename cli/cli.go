@@ -20,10 +20,10 @@ import (
 	"github.com/ladzaretti/ragrat/genericclioptions"
 	"github.com/ladzaretti/ragrat/llm"
 	"github.com/ladzaretti/ragrat/vecdb"
-	"golang.org/x/sync/errgroup"
-	"golang.org/x/sync/semaphore"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/sync/errgroup"
+	"golang.org/x/sync/semaphore"
 )
 
 var Version = "0.0.0"
@@ -63,13 +63,10 @@ const (
 type cleanupFunc func() error
 
 type llmOptions struct {
-	client         *llm.Client
-	session        *llm.ChatSession
-	vectordb       *vecdb.VectorDB
-	models         []string
-	selectedModel  string
-	embeddingModel string
-	topK           int
+	client   *llm.Client
+	session  *llm.ChatSession
+	vectordb *vecdb.VectorDB
+	models   []string
 }
 
 var _ genericclioptions.BaseOptions = &llmOptions{}
@@ -84,7 +81,7 @@ type step func(ctx context.Context, args ...string) error
 type DefaultRAGOptions struct {
 	*genericclioptions.StdioOptions
 
-	configOptions *ConfigOptions
+	configOptions *configOptions
 	llmOptions    *llmOptions
 
 	cleanupFuncs  []cleanupFunc
@@ -92,7 +89,7 @@ type DefaultRAGOptions struct {
 	matchPatterns []string
 	matchREs      []*regexp.Regexp
 
-	run []step
+	steps []step
 }
 
 var _ genericclioptions.CmdOptions = &DefaultRAGOptions{}
@@ -144,7 +141,7 @@ func (o *DefaultRAGOptions) Validate() error {
 }
 
 func (o *DefaultRAGOptions) Run(ctx context.Context, args ...string) error {
-	for _, s := range o.run {
+	for _, s := range o.steps {
 		if err := s(ctx, args...); err != nil {
 			return err
 		}
@@ -154,55 +151,122 @@ func (o *DefaultRAGOptions) Run(ctx context.Context, args ...string) error {
 }
 
 func (o *DefaultRAGOptions) planFor(cmd *cobra.Command) {
-	o.run = o.run[:0]
+	o.steps = o.steps[:0]
 
 	switch cmd.CalledAs() {
 	case "ragrat", "tui":
-		o.add(o.prepareLLMEnvironment)
-		o.add(o.embed)
+		o.addStep(func(_ context.Context, _ ...string) error { return o.initLogger() })
+		o.addStep(func(_ context.Context, _ ...string) error { return validateQueryParams(o) })
+		o.addStep(func(_ context.Context, _ ...string) error { return o.initClient() })
+		o.addStep(o.initLLMModels)
+		o.addStep(func(_ context.Context, _ ...string) error {
+			return validateSelectedModels(
+				o.llmOptions.models,
+				o.configOptions.resolved.LLM.Model,
+				o.configOptions.resolved.Embedding.EmbeddingModel,
+			)
+		})
+		o.addStep(func(_ context.Context, _ ...string) error { return o.initSession(o.Logger) })
+		o.addStep(o.initVecdb)
+		o.addStep(o.embed)
+	case "list":
+		o.addStep(func(_ context.Context, _ ...string) error { return o.initLogger() })
+		o.addStep(func(_ context.Context, _ ...string) error { return o.initClient() })
+		o.addStep(o.initLLMModels)
 	default:
 	}
 }
 
-func (o *DefaultRAGOptions) add(rs step) {
-	o.run = append(o.run, rs)
+func (o *DefaultRAGOptions) addStep(s step) {
+	o.steps = append(o.steps, s)
 }
 
-func (o *DefaultRAGOptions) prepareLLMEnvironment(ctx context.Context, _ ...string) error {
-	logger, err := o.initLogger()
+func (o *DefaultRAGOptions) initLogger() error {
+	dir := o.configOptions.resolved.Logging.Dir
+	name := o.configOptions.resolved.Logging.Filename
+
+	f, err := openLogFile(dir, name)
 	if err != nil {
-		return err
+		return errf("open log file: %v", err)
 	}
+
+	o.cleanupFuncs = append(o.cleanupFuncs, func() error { return f.Close() })
+
+	level, _ := genericclioptions.ParseLevel(o.configOptions.resolved.Logging.Level)
+	o.SetLevel(level)
+
+	logger := slog.New(slog.NewTextHandler(f, &slog.HandlerOptions{Level: level}))
 
 	o.Opts(genericclioptions.WithLogger(logger))
 
-	if err := validateQueryParams(o); err != nil {
-		return err
+	return nil
+}
+
+func (o *DefaultRAGOptions) initClient() error {
+	opts := []llm.Option{
+		llm.WithBaseURL(o.configOptions.resolved.LLM.BaseURL),
+		llm.WithLogger(o.Logger),
 	}
 
-	if err := o.initLLM(logger); err != nil {
-		return err
+	temperature := o.configOptions.resolved.LLM.Temperature
+
+	if temperature != 0.0 {
+		opts = append(opts, llm.WithTemperature(temperature))
 	}
 
+	client, err := llm.NewClient(opts...)
+	if err != nil {
+		return errf("new client: %v", err)
+	}
+
+	o.llmOptions.client = client
+
+	return nil
+}
+
+func (o *DefaultRAGOptions) initSession(logger *slog.Logger) error {
+	var (
+		model       = o.configOptions.resolved.LLM.Model
+		temperature = o.configOptions.resolved.LLM.Temperature
+		system      = o.configOptions.fileConfig.Prompt.System
+	)
+
+	sessionOpts := []llm.SessionOpt{
+		llm.WithSessionLogger(logger),
+	}
+
+	if temperature != 0.0 {
+		sessionOpts = append(sessionOpts, llm.WithSessionTemperature(temperature))
+	}
+
+	session, err := llm.NewChat(o.llmOptions.client, system, model, sessionOpts...)
+	if err != nil {
+		return errf("new chat session: %v", err)
+	}
+
+	o.llmOptions.session = session
+
+	return nil
+}
+
+func (o *DefaultRAGOptions) initLLMModels(ctx context.Context, _ ...string) error {
 	m, err := o.llmOptions.client.ListModels(ctx)
 	if err != nil {
 		return errf("llm list models: %v", err)
 	}
 
-	embeddingModel, topK := o.configOptions.resolved.Embedding.EmbeddingModel, o.configOptions.resolved.Embedding.TopK
+	o.llmOptions.models = m
 
-	if err := validateSelectedModels(m, o.llmOptions.selectedModel, embeddingModel); err != nil {
-		return err
-	}
+	return nil
+}
 
+func (o *DefaultRAGOptions) initVecdb(_ context.Context, _ ...string) error {
 	v, err := vecdb.New(o.configOptions.resolved.Embedding.Dimensions)
 	if err != nil {
 		return errf("create vector database:%v", err)
 	}
 
-	o.llmOptions.models = m
 	o.llmOptions.vectordb = v
-	o.llmOptions.topK = topK
 
 	return nil
 }
@@ -380,8 +444,8 @@ func (o *DefaultRAGOptions) RunQuery(ctx context.Context, _ ...string) error {
 	defer spinner.stop()
 
 	var (
-		selectedModel  = o.llmOptions.selectedModel
-		embeddingModel = o.llmOptions.embeddingModel
+		selectedModel  = o.configOptions.resolved.LLM.Model
+		embeddingModel = o.configOptions.resolved.Embedding.EmbeddingModel
 		topK           = o.configOptions.resolved.Embedding.TopK
 	)
 
@@ -478,69 +542,6 @@ func drainStream(ctx context.Context, ch <-chan prompt.Chunk, printFunc func(str
 	}
 }
 
-func (o *DefaultRAGOptions) initLogger() (*slog.Logger, error) {
-	dir := o.configOptions.resolved.Logging.Dir
-	name := o.configOptions.resolved.Logging.Filename
-
-	f, err := openLogFile(dir, name)
-	if err != nil {
-		return nil, errf("open log file: %v", err)
-	}
-
-	o.cleanupFuncs = append(o.cleanupFuncs, func() error { return f.Close() })
-
-	level, _ := genericclioptions.ParseLevel(o.configOptions.resolved.Logging.Level)
-	o.SetLevel(level)
-
-	logger := slog.New(slog.NewTextHandler(f, &slog.HandlerOptions{Level: level}))
-
-	return logger, nil
-}
-
-func (o *DefaultRAGOptions) initLLM(logger *slog.Logger) error {
-	opts := []llm.Option{
-		llm.WithBaseURL(o.configOptions.resolved.LLM.BaseURL),
-		llm.WithLogger(logger),
-	}
-
-	temperature := o.configOptions.resolved.LLM.Temperature
-
-	if temperature != 0.0 {
-		opts = append(opts, llm.WithTemperature(temperature))
-	}
-
-	client, err := llm.NewClient(opts...)
-	if err != nil {
-		return errf("new client: %v", err)
-	}
-
-	var (
-		model          = o.configOptions.resolved.LLM.Model
-		embeddingModel = o.configOptions.resolved.Embedding.EmbeddingModel
-		system         = o.configOptions.fileConfig.Prompt.System
-	)
-
-	sessionOpts := []llm.SessionOpt{
-		llm.WithSessionLogger(logger),
-	}
-
-	if temperature != 0.0 {
-		sessionOpts = append(sessionOpts, llm.WithSessionTemperature(temperature))
-	}
-
-	session, err := llm.NewChat(client, system, model, sessionOpts...)
-	if err != nil {
-		return errf("new chat session: %v", err)
-	}
-
-	o.llmOptions.client = client
-	o.llmOptions.session = session
-	o.llmOptions.selectedModel = model
-	o.llmOptions.embeddingModel = embeddingModel
-
-	return nil
-}
-
 // NewDefaultRAGCommand creates the root cobra command.
 func NewDefaultRAGCommand(iostreams *genericclioptions.IOStreams, args []string) *cobra.Command {
 	o := NewDefaultRAGOptions(iostreams)
@@ -581,6 +582,7 @@ Configuration is handled via flags or config files.`,
 
 	cmd.AddCommand(NewCmdTUI(o))
 	cmd.AddCommand(NewCmdConfig(o))
+	cmd.AddCommand(NewCmdListModels(o))
 
 	return cmd
 }
