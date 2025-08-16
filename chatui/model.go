@@ -462,6 +462,7 @@ func (m *model) handleModelList(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.focus(focusTextarea)
 
 		return m, textinput.Blink
+	default:
 	}
 
 	var cmd tea.Cmd
