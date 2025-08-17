@@ -28,7 +28,7 @@ func (*ListModelsOptions) Complete() error { return nil }
 func (*ListModelsOptions) Validate() error { return nil }
 
 func (o *ListModelsOptions) Run(_ context.Context, _ ...string) error {
-	for _, m := range o.models {
+	for _, m := range o.availableModels {
 		o.Print(m + "\n")
 	}
 

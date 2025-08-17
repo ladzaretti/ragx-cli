@@ -10,8 +10,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"unicode/utf8"
-
-	"github.com/ladzaretti/ragrat/genericclioptions"
 )
 
 var (
@@ -130,7 +128,7 @@ type dataChunks struct {
 	chunks []string
 }
 
-func chunkFiles(ctx context.Context, io *genericclioptions.IOStreams, paths []string, chunkSize, overlap int) ([]*dataChunks, error) {
+func chunkFiles(ctx context.Context, paths []string, chunkSize, overlap int) ([]*dataChunks, error) {
 	chunked := make([]*dataChunks, 0, len(paths))
 
 	for _, path := range paths {
@@ -142,8 +140,7 @@ func chunkFiles(ctx context.Context, io *genericclioptions.IOStreams, paths []st
 
 		chunks, err := chunkFile(path, chunkSize, overlap)
 		if err != nil {
-			io.Warnf("chunk file: %v\n", err)
-			continue
+			return nil, err
 		}
 
 		chunked = append(chunked, chunks)
