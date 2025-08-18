@@ -91,6 +91,6 @@ func (io *IOStreams) Warnf(format string, args ...any) {
 // Errorf writes a formatted message to the error stream.
 func (io *IOStreams) Errorf(format string, args ...any) {
 	if io.level <= slog.LevelError {
-		fmt.Fprintf(io.ErrOut, "WARN "+format, args...)
+		fmt.Fprintf(io.ErrOut, "ERROR "+format, args...)
 	}
 }

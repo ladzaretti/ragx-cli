@@ -187,7 +187,7 @@ func NewCmdQuery(defaults *DefaultRAGOptions) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(&o.query, "", "q", "", "Query to send to the LLM")
+	cmd.Flags().StringVarP(&o.query, "query", "q", "", "Query to send to the LLM")
 
 	return cmd
 }

@@ -101,7 +101,14 @@ func (*configOptions) Run(context.Context, ...string) error { return nil }
 
 // NewCmdConfig creates the cobra config command tree.
 func NewCmdConfig(defaults *DefaultRAGOptions) *cobra.Command {
-	hiddenFlags := []string{"config", "no-hooks", "no-login-prompt"}
+	hiddenFlags := []string{
+		"base-url",
+		"dim",
+		"embedding-model",
+		"match",
+		"model",
+	}
+
 	o := NewConfigOptions(defaults.StdioOptions)
 
 	cmd := &cobra.Command{
@@ -192,13 +199,16 @@ func newGenerateConfigCmd(defaults *DefaultRAGOptions) *cobra.Command {
 	o := newGenerateConfigOptions(defaults.StdioOptions)
 
 	cmd := &cobra.Command{
-		Use:   "generate",
-		Short: "Print a default config file",
-		Long:  `Outputs the default configuration in TOML format to stdout.`,
+		Use:           "generate",
+		Short:         "Print a default config file",
+		Long:          `Outputs the default configuration in TOML format to stdout.`,
+		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return clierror.Check(genericclioptions.ExecuteCommand(cmd.Context(), o))
 		},
 	}
+
+	genericclioptions.MarkAllFlagsHidden(cmd, "help")
 
 	return cmd
 }
@@ -240,26 +250,23 @@ func (o *validateConfigOptions) Run(context.Context, ...string) error {
 
 // newValidateConfigCmd creates the 'validate' subcommand for validating the config file.
 func newValidateConfigCmd(defaults *DefaultRAGOptions) *cobra.Command {
-	hiddenFlags := []string{"config", "no-hooks", "no-login-prompt"}
 	o := newValidateConfigOptions(defaults.StdioOptions)
 
 	cmd := &cobra.Command{
-		Use:   "validate",
-		Short: "Check config validity",
+		Use:           "validate",
+		Short:         "Check config validity",
+		SilenceErrors: true,
 		Long: fmt.Sprintf(`Loads the configuration file and checks for common errors.
 
 If --file is not provided, the default config path (~/%s) is used.`, defaultConfigName),
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			o.configPath, _ = cmd.InheritedFlags().GetString("file")
+			o.configPath, _ = cmd.InheritedFlags().GetString("config")
 
-			return cmp.Or(
-				clierror.Check(genericclioptions.RejectDisallowedFlags(cmd, hiddenFlags...)),
-				clierror.Check(genericclioptions.ExecuteCommand(cmd.Context(), o)),
-			)
+			return clierror.Check(genericclioptions.ExecuteCommand(cmd.Context(), o))
 		},
 	}
 
-	genericclioptions.MarkFlagsHidden(cmd, hiddenFlags...)
+	genericclioptions.MarkAllFlagsHidden(cmd, "help", "config")
 
 	return cmd
 }

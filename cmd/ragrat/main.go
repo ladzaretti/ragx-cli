@@ -15,7 +15,7 @@ func main() {
 	rag := cli.NewDefaultRAGCommand(io, os.Args[1:])
 
 	if err := rag.Execute(); err != nil {
-		io.Errorf("%v", err)
+		io.Errorf("%v\n", err)
 		os.Exit(1)
 	}
 }

@@ -2,10 +2,29 @@ package genericclioptions
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
+
+// MarkAllFlagsHidden hides all flags from the target's help output.
+func MarkAllFlagsHidden(target *cobra.Command, excluded ...string) {
+	f := target.HelpFunc()
+
+	target.SetHelpFunc(func(cmd *cobra.Command, args []string) {
+		cmd.Flags().VisitAll(func(f *pflag.Flag) {
+			if slices.Contains(excluded, f.Name) {
+				return
+			}
+
+			f.Hidden = true
+		})
+
+		f(cmd, args)
+	})
+}
 
 // MarkFlagsHidden hides the given flags from the target's help output.
 func MarkFlagsHidden(target *cobra.Command, hidden ...string) {

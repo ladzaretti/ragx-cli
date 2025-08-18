@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -255,32 +254,19 @@ func NewDefaultRAGCommand(iostreams *genericclioptions.IOStreams, args []string)
 	o := NewDefaultRAGOptions(iostreams)
 
 	cmd := &cobra.Command{
-		Use:   "ragrat",
-		Args:  cobra.NoArgs,
-		Short: "",
+		Use:  "ragrat",
+		Args: cobra.NoArgs,
+		CompletionOptions: cobra.CompletionOptions{
+			DisableDefaultCmd: true,
+		}, Short: "",
 		Long: `ragrat is a terminal based, self-hosted Retrieval-Augmented Generation (RAG) assistant.
 
 It supports local and remote LLMs via OpenAI-compatible APIs.
 Configuration is handled via flags or config files.`,
+		SilenceUsage: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			o.planFor(cmd)
-
-			// fmt.Println(args)
-
-			// norm, err := normalizeArgs(args, cmd.ArgsLenAtDash(), o.query)
-			// if err != nil {
-			// 	return err
-			// }
-
-			// o.query = norm.query
-			// // args = norm.args
-			// fmt.Println(args)
-			// fmt.Printf("query:%q\n", norm.query)
-			// fmt.Printf("args:%v\n", norm.args)
-			return cmp.Or(
-				// clierror.Check(o.normalizeArgs(&args, cmd.ArgsLenAtDash())),
-				clierror.Check(genericclioptions.ExecuteCommand(cmd.Context(), o, args...)),
-			)
+			return clierror.Check(genericclioptions.ExecuteCommand(cmd.Context(), o, args...))
 		},
 		PersistentPostRunE: func(_ *cobra.Command, _ []string) error {
 			return clierror.Check(executeCleanup(o.cleanupFuncs))
@@ -299,10 +285,25 @@ Configuration is handled via flags or config files.`,
 	cmd.PersistentFlags().StringSliceVarP(&o.matchPatterns, "match", "M", nil, "Glob pattern(s) for matching files (e.g. '*.md', 'data/*.txt')")
 	cmd.PersistentFlags().IntVarP(&o.configOptions.flags.dimensions, "dim", "", 0, "Embedding vector dimension (must match embedding model output)")
 
+	hiddenFlags := []string{
+		"base-url",
+		"config",
+		"dim",
+		"embedding-model",
+		"log-dir",
+		"log-file",
+		"log-level",
+		"match",
+		"model",
+	}
+
+	genericclioptions.MarkFlagsHidden(cmd, hiddenFlags...)
+
 	cmd.AddCommand(NewCmdChat(o))
 	cmd.AddCommand(NewCmdQuery(o))
 	cmd.AddCommand(NewCmdConfig(o))
 	cmd.AddCommand(NewCmdListModels(o))
+	cmd.AddCommand(newVersionCommand(o))
 
 	return cmd
 }
