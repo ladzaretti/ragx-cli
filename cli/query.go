@@ -176,9 +176,31 @@ func NewCmdQuery(defaults *DefaultRAGOptions) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "query",
-		Short: "",
-		Long:  "",
+		Use:     "query [flags] [path]... [--] <query>",
+		Aliases: []string{"q"},
+		Short:   "Embed data from paths or stdin and query the LLM",
+		Long: `Embeds content from one or more paths (files or directories) or from stdin.
+Directories are walked recursively.
+
+Query is required and can be provided in the following precedence:
+  1) with --query/-q
+  2) after a flag terminator (--)
+  3) as the last positional argument
+
+When paths are provided, files are included if they match any -M/--match regex (full path).
+If no -M filter is given, all files under the provided paths are embedded.`,
+		Example: `  # embed all .go files in current dir and query via --query/-q
+  ragrat query . -M '\.go$' -q "<query>"
+
+  # embed a single file and provide query after flag terminator --
+  ragrat query readme.md -- "<query>"
+
+  # embed stdin and provide query as the last positional argument
+  cat readme.md | ragrat query "<query>"
+
+  # embed multiple paths with filter
+  ragrat query docs src -M '(?i)\.(md|txt)$' -q "<query>"`,
+		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return cmp.Or(
 				clierror.Check(o.normalizeArgs(&args, cmd.ArgsLenAtDash())),
@@ -187,7 +209,7 @@ func NewCmdQuery(defaults *DefaultRAGOptions) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(&o.query, "query", "q", "", "Query to send to the LLM")
+	cmd.Flags().StringVarP(&o.query, "query", "q", "", "query text (optional; can also use positional args)")
 
 	return cmd
 }
