@@ -78,6 +78,7 @@ func (o *configOptions) resolve() error {
 	o.resolved.LLM.Model = cmp.Or(os.Getenv("OPENAI_MODEL"), o.flags.model, o.fileConfig.LLM.Model)
 
 	o.resolved.Prompt.System = cmp.Or(o.fileConfig.Prompt.System, prompt.DefaultSystemPrompt)
+	o.resolved.Prompt.UserPromptTmpl = cmp.Or(o.fileConfig.Prompt.UserPromptTmpl, prompt.DefaultUserPromptTmpl)
 
 	o.resolved.Embedding.EmbeddingModel = cmp.Or(o.flags.embeddingModel, o.fileConfig.Embedding.EmbeddingModel)
 	o.resolved.Embedding.Dimensions = cmp.Or(o.flags.dimensions, o.fileConfig.Embedding.Dimensions)

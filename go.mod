@@ -7,6 +7,7 @@ require (
 	github.com/charmbracelet/bubbles v0.21.0
 	github.com/charmbracelet/bubbletea v1.3.6
 	github.com/charmbracelet/lipgloss v1.1.0
+	github.com/google/go-cmp v0.7.0
 	github.com/ncruces/go-sqlite3 v0.20.3
 	github.com/openai/openai-go/v2 v2.0.2
 	github.com/spf13/cobra v1.9.1

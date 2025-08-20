@@ -96,7 +96,15 @@ func (o *QueryOptions) Run(ctx context.Context, args ...string) error {
 
 	setStatus("sending to " + selectedModel)
 
-	p := prompt.BuildUserPrompt(o.query, hits, prompt.DecodeMeta)
+	opts := []prompt.PromptOpt{
+		prompt.WithUserPromptTmpl(o.llmOptions.promptConfig.UserPromptTmpl),
+	}
+
+	p, err := prompt.BuildUserPrompt(o.query, hits, prompt.DecodeMeta, opts...)
+	if err != nil {
+		return errf("build user prompt: %w", err)
+	}
+
 	ch := prompt.SendStream(ctx, o.llmOptions.session, selectedModel, p)
 
 	if err := drainStream(ctx, ch, o.Print, setStatus, spinner.stop); err != nil {

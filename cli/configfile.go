@@ -40,7 +40,8 @@ type LLMConfig struct {
 }
 
 type PromptConfig struct {
-	System string `json:"system_prompt,omitempty" toml:"system_prompt,commented" comment:"System prompt to override the default assistant behavior"`
+	System         string `json:"system_prompt,omitempty"    toml:"system_prompt,commented"    comment:"System prompt to override the default assistant behavior"`
+	UserPromptTmpl string `json:"user_prompt_tmpl,omitempty" toml:"user_prompt_tmpl,commented" comment:"Go text/template for building the USER QUERY + CONTEXT block"`
 }
 
 type EmbeddingConfig struct {

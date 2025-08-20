@@ -55,16 +55,15 @@ func (o *ChatOptions) Run(ctx context.Context, args ...string) error {
 	}
 
 	var (
-		tui = chatui.New(
-			o.client,
-			o.session,
-			o.vectordb,
-			o.embeddingConfig.TopK,
-			o.availableModels,
-			o.chatConfig.Model,
-			o.embeddingConfig.EmbeddingModel,
-		)
-		p = tea.NewProgram(tui, tea.WithAltScreen())
+		config = chatui.ModelConfig{
+			Models:         o.availableModels,
+			ChatModel:      o.chatConfig.Model,
+			UserPromptTmpl: o.promptConfig.UserPromptTmpl,
+			EmbeddingModel: o.embeddingConfig.EmbeddingModel,
+			TopK:           o.embeddingConfig.TopK,
+		}
+		tui = chatui.New(o.client, o.session, o.vectordb, config)
+		p   = tea.NewProgram(tui, tea.WithAltScreen())
 	)
 
 	if _, err := p.Run(); err != nil {

@@ -5,8 +5,8 @@ import (
 	"cmp"
 	"encoding/json"
 	"fmt"
-	"html/template"
 	"strings"
+	"text/template"
 
 	"github.com/ladzaretti/ragrat/vecdb"
 )
@@ -134,7 +134,7 @@ CONTEXT:
 {{- range .Chunks }}
 ----
 CHUNK id={{.ID}} source={{.Source}}
-text: {{.Content}}
+TEXT: {{.Content}}
 {{- end }}
 ----
 {{- else }}
@@ -167,7 +167,7 @@ func WithUserPromptTmpl(tmpl string) PromptOpt {
 
 // BuildUserPrompt renders the user prompt template.
 // If no template is provided, [DefaultUserPromptTmpl] is used.
-func BuildUserPrompt(query string, chunks []vecdb.SearchResult, metaFn MetaFunc, opts ...PromptOpt) string {
+func BuildUserPrompt(query string, chunks []vecdb.SearchResult, metaFn MetaFunc, opts ...PromptOpt) (string, error) {
 	c := &promptConfig{
 		userTmpl: DefaultUserPromptTmpl,
 	}
@@ -199,13 +199,13 @@ func BuildUserPrompt(query string, chunks []vecdb.SearchResult, metaFn MetaFunc,
 
 	t, err := template.New("user_prompt").Parse(c.userTmpl)
 	if err != nil {
-		return fmt.Sprintf("template parse error: %v", err)
+		return "", fmt.Errorf("template parse error: %v", err)
 	}
 
 	var buf bytes.Buffer
 	if err := t.Execute(&buf, td); err != nil {
-		return fmt.Sprintf("template execution error: %v", err)
+		return "", fmt.Errorf("template execution error: %v", err)
 	}
 
-	return buf.String()
+	return buf.String(), nil
 }

@@ -36,22 +36,28 @@ func (m *model) startRAGCmd(ctx context.Context, query string) tea.Cmd {
 		chat     = m.chat
 		vdb      = m.vecdb
 		llmModel = m.selectedModel
-		embModel = m.embeddingModel
-		topK     = m.topK
+		config   = m.config
 	)
 
 	return func() tea.Msg {
-		q, err := client.Embed(ctx, llm.EmbedRequest{Input: query, Model: embModel})
+		q, err := client.Embed(ctx, llm.EmbedRequest{Input: query, Model: config.EmbeddingModel})
 		if err != nil {
 			return ragErr{err}
 		}
 
-		hits, err := vdb.SearchKNN(toFloat32Slice(q.Vector), topK)
+		hits, err := vdb.SearchKNN(toFloat32Slice(q.Vector), config.TopK)
 		if err != nil {
 			return ragErr{err}
 		}
 
-		p := prompt.BuildUserPrompt(query, hits, prompt.DecodeMeta)
+		opts := []prompt.PromptOpt{
+			prompt.WithUserPromptTmpl(config.UserPromptTmpl),
+		}
+
+		p, err := prompt.BuildUserPrompt(query, hits, prompt.DecodeMeta, opts...)
+		if err != nil {
+			return ragErr{err}
+		}
 
 		ch := prompt.SendStream(ctx, chat, llmModel, p)
 

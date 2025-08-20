@@ -38,18 +38,17 @@ type model struct {
 
 	// chat session
 
-	chat           *llm.ChatSession
-	client         *llm.Client
-	vecdb          *vecdb.VectorDB
-	topK           int
-	selectedModel  string
-	embeddingModel string
+	chat   *llm.ChatSession
+	client *llm.Client
+	vecdb  *vecdb.VectorDB
+	config ModelConfig
 
 	historyBuilder   strings.Builder
 	responseBuilder  strings.Builder
 	reasoningBuilder strings.Builder
 
 	// focus management
+
 	currentFocus focus
 	leaderActive bool
 
@@ -58,6 +57,7 @@ type model struct {
 	loading       bool
 	reasoning     bool
 	reasoningDone bool
+	selectedModel string
 	cancel        context.CancelFunc // cancel for the in-flight LLM request
 	lastErr       string             // shown in footer when non-empty
 
@@ -120,8 +120,16 @@ func (m *model) focus(f focus) {
 	m.textarea.Blur()
 }
 
+type ModelConfig struct {
+	TopK           int
+	Models         []string
+	ChatModel      string
+	EmbeddingModel string
+	UserPromptTmpl string
+}
+
 // New creates a new [model].
-func New(client *llm.Client, chat *llm.ChatSession, vecdb *vecdb.VectorDB, topK int, models []string, chatModel string, embeddingModel string) *model {
+func New(client *llm.Client, chat *llm.ChatSession, vecdb *vecdb.VectorDB, config ModelConfig) *model {
 	ta := textarea.New()
 	ta.Placeholder = "Ask anything\n(Press Ctrl+S to submit)"
 	ta.Focus()
@@ -139,16 +147,16 @@ func New(client *llm.Client, chat *llm.ChatSession, vecdb *vecdb.VectorDB, topK 
 	sp.Spinner = spinner.Dot
 	sp.Style = spinnerCol
 
-	items := make([]list.Item, 0, len(models))
+	items := make([]list.Item, 0, len(config.Models))
 	longest := 0
 
 	selectedIndex := 0
-	for i, m := range models {
+	for i, m := range config.Models {
 		if l := lipgloss.Width(m); l > longest {
 			longest = l
 		}
 
-		if m == chatModel {
+		if m == config.ChatModel {
 			selectedIndex = i
 		}
 
@@ -171,19 +179,18 @@ func New(client *llm.Client, chat *llm.ChatSession, vecdb *vecdb.VectorDB, topK 
 		Background(lipgloss.Color(mochaSurface0))
 
 	return &model{
-		client:         client,
-		chat:           chat,
-		vecdb:          vecdb,
-		topK:           topK,
-		embeddingModel: embeddingModel,
-		viewport:       viewport.New(0, 0),
-		modelList:      lm,
-		listWidth:      lw,
-		textarea:       ta,
-		spinner:        sp,
-		selectedModel:  models[selectedIndex],
-		legendHeight:   1,
-		currentFocus:   focusTextarea,
+		client:        client,
+		chat:          chat,
+		vecdb:         vecdb,
+		config:        config,
+		selectedModel: config.Models[selectedIndex],
+		viewport:      viewport.New(0, 0),
+		modelList:     lm,
+		listWidth:     lw,
+		textarea:      ta,
+		spinner:       sp,
+		legendHeight:  1,
+		currentFocus:  focusTextarea,
 	}
 }
 
@@ -311,7 +318,7 @@ func (m *model) View() string {
 	} else {
 		footerItems = append(footerItems,
 			truncate(selectedModelStatusStyle, m.selectedModel, 28),
-			truncate(embedSelectedModelStatusStyle, m.embeddingModel, 22),
+			truncate(embedSelectedModelStatusStyle, m.config.EmbeddingModel, 22),
 		)
 	}
 
