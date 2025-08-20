@@ -113,10 +113,10 @@ func NewCmdConfig(defaults *DefaultRAGOptions) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "config",
-		Short: "Resolve and inspect configuration (subcommands available)",
-		Long: fmt.Sprintf(`Resolve and display the active ragrat configuration.
+		Short: "Show and inspect configuration",
+		Long: fmt.Sprintf(`Show the active ragrat configuration.
 
-If --config is not provided, the default config path (~/%s) is used.`, defaultConfigName),
+If --config is not provided, the default path (~/%s) is used.`, defaultConfigName),
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if err := clierror.Check(genericclioptions.RejectDisallowedFlags(cmd, hiddenFlags...)); err != nil {
 				return err
@@ -199,9 +199,10 @@ func newGenerateConfigCmd(defaults *DefaultRAGOptions) *cobra.Command {
 	o := newGenerateConfigOptions(defaults.StdioOptions)
 
 	cmd := &cobra.Command{
-		Use:           "generate",
-		Short:         "Print a default config file",
-		Long:          `Outputs the default configuration in TOML format to stdout.`,
+		Use:   "generate",
+		Short: "Generate a default config file",
+		Long: `Generate the default configuration in TOML format 
+and write it to stdout.`,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return clierror.Check(genericclioptions.ExecuteCommand(cmd.Context(), o))
@@ -253,12 +254,11 @@ func newValidateConfigCmd(defaults *DefaultRAGOptions) *cobra.Command {
 	o := newValidateConfigOptions(defaults.StdioOptions)
 
 	cmd := &cobra.Command{
-		Use:           "validate",
-		Short:         "Check config validity",
-		SilenceErrors: true,
-		Long: fmt.Sprintf(`Loads the configuration file and checks for common errors.
+		Use:   "validate",
+		Short: "Validate the config file",
+		Long: fmt.Sprintf(`Load the configuration file and check for common errors.
 
-If --file is not provided, the default config path (~/%s) is used.`, defaultConfigName),
+If --config is not provided, the default path (~/%s) is used.`, defaultConfigName),
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			o.configPath, _ = cmd.InheritedFlags().GetString("config")
 

@@ -82,10 +82,22 @@ func NewCmdChat(defaults *DefaultRAGOptions) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:     "chat",
+		Use:     "chat [flags] [path]...",
 		Aliases: []string{"tui"},
 		Short:   "Start the interactive terminal chat UI",
-		Long:    "Launch a terminal interface for chatting with a local or remote LLM.",
+		Long: `Embed content from one or more paths (files or directories) or from stdin, 
+then launches an interactive TUI for chatting with the LLM. Directories are walked recursively.
+
+When paths are provided, files are included if they match any -M/--match regex (full path).
+If no -M filter is given, all files under the provided paths are embedded.`,
+		Example: `  # embed all .go files in current dir and start the TUI
+  ragrat chat . -M '\.go$'
+
+  # embed multiple paths (markdown and txt) and start the TUI
+  ragrat chat ./docs ./src -M '(?i)\.(md|txt)$'
+
+  # embed stdin and start the TUI
+  cat readme.md | ragrat chat`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return clierror.Check(genericclioptions.ExecuteCommand(cmd.Context(), o, args...))
 		},

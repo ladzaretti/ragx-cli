@@ -259,10 +259,8 @@ func NewDefaultRAGCommand(iostreams *genericclioptions.IOStreams, args []string)
 		CompletionOptions: cobra.CompletionOptions{
 			DisableDefaultCmd: true,
 		}, Short: "",
-		Long: `ragrat is a terminal based, self-hosted Retrieval-Augmented Generation (RAG) assistant.
-
-It supports local and remote LLMs via OpenAI-compatible APIs.
-Configuration is handled via flags or config files.`,
+		Long: `ragrat is a terminal-first RAG assistant. 
+Embed data, run retrieval, and query local or remote OpenAI API-compatible LLMs.`,
 		SilenceUsage: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			o.planFor(cmd)
@@ -275,15 +273,15 @@ Configuration is handled via flags or config files.`,
 
 	cmd.SetArgs(args)
 
-	cmd.PersistentFlags().StringVarP(&o.configOptions.flags.baseURL, "base-url", "u", "", "Override LLM base URL")
-	cmd.PersistentFlags().StringVarP(&o.configOptions.flags.model, "model", "m", "", "Override LLM model")
-	cmd.PersistentFlags().StringVarP(&o.configOptions.flags.configPath, "config", "c", "", "Path to config file")
-	cmd.PersistentFlags().StringVarP(&o.configOptions.flags.embeddingModel, "embedding-model", "e", "", "Override embedding model")
-	cmd.PersistentFlags().StringVarP(&o.configOptions.flags.logDir, "log-dir", "d", "", "Override log directory")
-	cmd.PersistentFlags().StringVarP(&o.configOptions.flags.logFilename, "log-file", "f", "", "Override log filename")
-	cmd.PersistentFlags().StringVarP(&o.configOptions.flags.logLevel, "log-level", "l", "", "Set log level (debug, info, warn, error)")
-	cmd.PersistentFlags().StringSliceVarP(&o.matchPatterns, "match", "M", nil, "Glob pattern(s) for matching files (e.g. '*.md', 'data/*.txt')")
-	cmd.PersistentFlags().IntVarP(&o.configOptions.flags.dimensions, "dim", "", 0, "Embedding vector dimension (must match embedding model output)")
+	cmd.PersistentFlags().StringVarP(&o.configOptions.flags.baseURL, "base-url", "u", "", "set LLM base URL")
+	cmd.PersistentFlags().StringVarP(&o.configOptions.flags.model, "model", "m", "", "set LLM model")
+	cmd.PersistentFlags().StringVarP(&o.configOptions.flags.configPath, "config", "c", "", fmt.Sprintf("path to config file (default: ~/%s)", defaultConfigName))
+	cmd.PersistentFlags().StringVarP(&o.configOptions.flags.embeddingModel, "embedding-model", "e", "", "set embedding model")
+	cmd.PersistentFlags().StringVarP(&o.configOptions.flags.logDir, "log-dir", "d", "", "set log directory")
+	cmd.PersistentFlags().StringVarP(&o.configOptions.flags.logFilename, "log-file", "f", "", "set log filename")
+	cmd.PersistentFlags().StringVarP(&o.configOptions.flags.logLevel, "log-level", "l", "", "set log level (debug, info, warn, error)")
+	cmd.PersistentFlags().StringSliceVarP(&o.matchPatterns, "match", "M", nil, "regex pattern(s) to match files (e.g. '^.*\\.md$', '(?i)\\.txt$')")
+	cmd.PersistentFlags().IntVar(&o.configOptions.flags.dimensions, "dim", 0, "embedding vector dimension (must match embedding model output)")
 
 	hiddenFlags := []string{
 		"base-url",

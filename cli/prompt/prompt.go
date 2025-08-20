@@ -1,9 +1,11 @@
 package prompt
 
 import (
+	"bytes"
 	"cmp"
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"strings"
 
 	"github.com/ladzaretti/ragrat/vecdb"
@@ -124,36 +126,86 @@ I don't know based on the provided context.
 If you add the roadmap document or link, I can summarize it.
 `
 
-// BuildUserPrompt creates a user prompt in the format expected by the system prompt
-func BuildUserPrompt(query string, chunks []vecdb.SearchResult, metaFn func(raw json.RawMessage) (source string, id int)) string {
-	var sb strings.Builder
+const DefaultUserPromptTmpl = `USER QUERY:
+{{.Query}}
 
-	sb.WriteString("USER QUERY:\n")
-	sb.WriteString(strings.TrimSpace(query))
-	sb.WriteString("\n\nCONTEXT:\n")
+CONTEXT:
+{{- if .Chunks }}
+{{- range .Chunks }}
+----
+CHUNK id={{.ID}} source={{.Source}}
+text: {{.Content}}
+{{- end }}
+----
+{{- else }}
+(no relevant chunks)
+{{- end }}`
 
-	if len(chunks) == 0 {
-		sb.WriteString("(no relevant chunks)\n")
-		return sb.String()
+type promptConfig struct {
+	userTmpl string
+}
+
+type chunkView struct {
+	ID      int
+	Source  string
+	Content string
+}
+type tmplData struct {
+	Query  string
+	Chunks []chunkView
+}
+
+type MetaFunc func(raw json.RawMessage) (source string, id int)
+
+type PromptOpt func(*promptConfig)
+
+func WithUserPromptTmpl(tmpl string) PromptOpt {
+	return func(c *promptConfig) {
+		c.userTmpl = tmpl
+	}
+}
+
+// BuildUserPrompt renders the user prompt template.
+// If no template is provided, [DefaultUserPromptTmpl] is used.
+func BuildUserPrompt(query string, chunks []vecdb.SearchResult, metaFn MetaFunc, opts ...PromptOpt) string {
+	c := &promptConfig{
+		userTmpl: DefaultUserPromptTmpl,
+	}
+
+	for _, o := range opts {
+		o(c)
+	}
+
+	td := tmplData{
+		Query:  strings.TrimSpace(query),
+		Chunks: make([]chunkView, 0, len(chunks)),
 	}
 
 	for i, ch := range chunks {
-		source, id := "", 0
+		src, id := "", 0
 		if metaFn != nil {
-			source, id = metaFn(ch.Meta)
+			src, id = metaFn(ch.Meta)
 		}
 
-		source = cmp.Or(source, "unknown")
+		src = cmp.Or(src, "unknown")
 		id = cmp.Or(id, i)
 
-		sb.WriteString("----\n")
-		fmt.Fprintf(&sb, "CHUNK id=%d source=%s\n", id, source)
-		sb.WriteString("text: ")
-		sb.WriteString(strings.TrimSpace(ch.Content))
-		sb.WriteString("\n")
+		td.Chunks = append(td.Chunks, chunkView{
+			ID:      id,
+			Source:  src,
+			Content: strings.TrimSpace(ch.Content),
+		})
 	}
 
-	sb.WriteString("----\n")
+	t, err := template.New("user_prompt").Parse(c.userTmpl)
+	if err != nil {
+		return fmt.Sprintf("template parse error: %v", err)
+	}
 
-	return sb.String()
+	var buf bytes.Buffer
+	if err := t.Execute(&buf, td); err != nil {
+		return fmt.Sprintf("template execution error: %v", err)
+	}
+
+	return buf.String()
 }

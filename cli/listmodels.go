@@ -45,7 +45,12 @@ func NewCmdListModels(defaults *DefaultRAGOptions) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List available models",
-		Long:  "",
+		Long:  "List all models available to ragrat from the configured LLM backend.",
+		Example: `# list models from the active backend
+  ragrat list
+
+  # list models using a specific config file
+  ragrat list --config ~/.ragrat.toml`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return clierror.Check(genericclioptions.ExecuteCommand(cmd.Context(), o))
 		},

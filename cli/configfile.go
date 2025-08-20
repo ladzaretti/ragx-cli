@@ -33,7 +33,7 @@ type Config struct {
 }
 
 type LLMConfig struct {
-	BaseURL     string  `json:"base_url"              toml:"base_url"              comment:"Base URL for the LLM server (e.g., Ollama, OpenAI-compatible)"`
+	BaseURL     string  `json:"base_url"              toml:"base_url"              comment:"Base URL for the LLM server (e.g., Ollama, OpenAI API-compatible)"`
 	APIKey      string  `json:"api_key,omitempty"     toml:"api_key,commented"     comment:"Optional API key if required"`
 	Model       string  `json:"model"                 toml:"model,commented"       comment:"Default model to use"`
 	Temperature float64 `json:"temperature,omitempty" toml:"temperature,commented" comment:"Completion temperature"`
