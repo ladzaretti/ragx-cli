@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/ladzaretti/ragrat/llm"
 	"github.com/ladzaretti/ragrat/vecdb"
@@ -31,10 +32,11 @@ const (
 type model struct {
 	// ui components
 
-	viewport  viewport.Model
-	textarea  textarea.Model
-	spinner   spinner.Model
-	modelList list.Model
+	viewport        viewport.Model
+	textarea        textarea.Model
+	spinner         spinner.Model
+	thinkingSpinner spinner.Model
+	modelList       list.Model
 
 	// chat session
 
@@ -57,6 +59,7 @@ type model struct {
 	loading       bool
 	reasoning     bool
 	reasoningDone bool
+	reasoningShow bool
 	selectedModel string
 	cancel        context.CancelFunc // cancel for the in-flight LLM request
 	lastErr       string             // shown in footer when non-empty
@@ -143,9 +146,20 @@ func New(client *llm.Client, chat *llm.ChatSession, vecdb *vecdb.VectorDB, confi
 		BorderTop(true).
 		BorderForeground(lipgloss.Color(mochaSurface0))
 
-	sp := spinner.New()
-	sp.Spinner = spinner.Dot
-	sp.Style = spinnerCol
+	spinnerPlain := spinner.New(
+		spinner.WithSpinner(spinner.Dot),
+		spinner.WithStyle(spinnerStyle),
+	)
+
+	spinnerThinking := spinner.New(spinner.WithSpinner(spinner.Spinner{
+		Frames: []string{
+			"thinking",
+			"thinking.",
+			"thinking..",
+			"thinking...",
+		},
+		FPS: time.Second / 4,
+	}))
 
 	items := make([]list.Item, 0, len(config.Models))
 	longest := 0
@@ -179,18 +193,19 @@ func New(client *llm.Client, chat *llm.ChatSession, vecdb *vecdb.VectorDB, confi
 		Background(lipgloss.Color(mochaSurface0))
 
 	return &model{
-		client:        client,
-		chat:          chat,
-		vecdb:         vecdb,
-		config:        config,
-		selectedModel: config.Models[selectedIndex],
-		viewport:      viewport.New(0, 0),
-		modelList:     lm,
-		listWidth:     lw,
-		textarea:      ta,
-		spinner:       sp,
-		legendHeight:  1,
-		currentFocus:  focusTextarea,
+		client:          client,
+		chat:            chat,
+		vecdb:           vecdb,
+		config:          config,
+		selectedModel:   config.Models[selectedIndex],
+		viewport:        viewport.New(0, 0),
+		modelList:       lm,
+		listWidth:       lw,
+		textarea:        ta,
+		spinner:         spinnerPlain,
+		thinkingSpinner: spinnerThinking,
+		legendHeight:    1,
+		currentFocus:    focusTextarea,
 	}
 }
 
@@ -206,11 +221,23 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:cyclop
 		return m.resize(msg)
 
 	case spinner.TickMsg:
-		var cmd tea.Cmd
-		m.spinner, cmd = m.spinner.Update(msg)
+		var plainCmd, thinkingCmd tea.Cmd
+
+		m.spinner, plainCmd = m.spinner.Update(msg)
+		m.thinkingSpinner, thinkingCmd = m.thinkingSpinner.Update(msg)
+
+		cmds := []tea.Cmd{}
 
 		if m.loading {
-			return m, cmd
+			cmds = append(cmds, plainCmd)
+		}
+
+		if m.reasoning {
+			cmds = append(cmds, thinkingCmd)
+		}
+
+		if len(cmds) > 0 {
+			return m, tea.Batch(cmds...)
 		}
 
 		return m, nil
@@ -253,13 +280,16 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:cyclop
 			return m, nil
 		}
 
+		reasoningStarted := false
+
 		switch strings.TrimSpace(msg.Content) {
 		case reasoningStartTag:
-			m.reasoning = true
+			m.reasoning, reasoningStarted = true, true
 		case reasoningEndTag:
 			m.reasoning, m.reasoningDone = false, true
 			m.reasoningBuilder.Reset()
 		default:
+			// discard whitespaces-only chunk after reasoning is done.
 			if m.reasoningDone && strings.TrimSpace(msg.Content) == "" {
 				m.reasoningDone = false
 				return m, waitChunk(msg.ch)
@@ -273,7 +303,13 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:cyclop
 			m.viewport.GotoBottom()
 		}
 
-		return m, waitChunk(msg.ch)
+		cmds := []tea.Cmd{waitChunk(msg.ch)}
+
+		if reasoningStarted {
+			cmds = append(cmds, m.thinkingSpinner.Tick)
+		}
+
+		return m, tea.Batch(cmds...)
 	}
 
 	// bubble internal updates
@@ -289,9 +325,6 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:cyclop
 	m.modelList, mlCmd = m.modelList.Update(msg)
 
 	cmds := []tea.Cmd{vpCmd, taCmd, mlCmd}
-	if m.loading {
-		cmds = append(cmds, m.spinner.Tick)
-	}
 
 	return m, tea.Batch(cmds...)
 }
@@ -418,6 +451,11 @@ var leaderMap = map[string]func(*model) (tea.Model, tea.Cmd){
 	"q": func(m *model) (tea.Model, tea.Cmd) { return m, tea.Quit },
 	"h": func(m *model) (tea.Model, tea.Cmd) { m.focus(focusViewport); return m, nil },
 	"m": func(m *model) (tea.Model, tea.Cmd) { m.focus(focusModelList); return m, nil },
+	"r": func(m *model) (tea.Model, tea.Cmd) {
+		m.reasoningShow = !m.reasoningShow
+		m.focus(focusTextarea)
+		return m, textinput.Blink
+	},
 	"l": func(m *model) (tea.Model, tea.Cmd) {
 		m.historyBuilder.Reset()
 		m.viewport.SetContent("")
@@ -556,8 +594,17 @@ func (m *model) updateViewport() {
 	}
 
 	if m.reasoningBuilder.Len() > 0 {
-		reasoning := m.reasoningBuilder.String()
-		view += "\n" + reasoningStyle.Render(reasoning) + "\n"
+		var block string
+
+		if m.reasoningShow {
+			block = reasoningTextStyle.Render(m.reasoningBuilder.String())
+		} else {
+			block = reasoningSpinnerStyle.Render(m.thinkingSpinner.View())
+		}
+
+		if block != "" {
+			view += "\n" + block + "\n"
+		}
 	}
 
 	wrapped := lipgloss.NewStyle().
@@ -589,6 +636,7 @@ func (m *model) legend() string {
 	case m.leaderActive:
 		return lipgloss.JoinHorizontal(lipgloss.Left,
 			legendItem("H", "HISTORY"), divider,
+			legendItem("R", m.reasoningLegendLabel()), divider,
 			legendItem("M", "CHANGE MODEL"), divider,
 			legendItem("L", "CLEAR CHAT"), divider,
 			legendItem("Q", "QUIT"), divider,
@@ -677,4 +725,12 @@ func (m *model) writeResponseChunk(s string) {
 	} else {
 		m.responseBuilder.WriteString(s)
 	}
+}
+
+func (m *model) reasoningLegendLabel() string {
+	if m.reasoningShow {
+		return "HIDE REASONING"
+	}
+
+	return "SHOW REASONING"
 }

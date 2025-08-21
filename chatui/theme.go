@@ -10,6 +10,9 @@ const ascii = `          ▗
     ▄▌      
 `
 
+// TODO: bigger ascci art for when window is big.
+// TODO2: toggle thinking
+
 var asciiComponentView = lipgloss.NewStyle().
 	Foreground(lipgloss.Color(mochaLavender)). // or mochaBlue
 	Bold(true).
@@ -37,12 +40,13 @@ const (
 )
 
 var (
-	keyStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color(mochaSubtext0)).Bold(true)
-	dimStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color(mochaOverlay2))
-	spinnerCol      = lipgloss.NewStyle().Foreground(lipgloss.Color(mochaMauve))
-	userPrefixStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(mochaBlue)).Bold(true)
-	llmPrefixStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color(mochaMauve)).Bold(true)
-	reasoningStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color(mochaSubtext0)).Italic(true)
+	keyStyle              = lipgloss.NewStyle().Foreground(lipgloss.Color(mochaSubtext0)).Bold(true)
+	dimStyle              = lipgloss.NewStyle().Foreground(lipgloss.Color(mochaOverlay2))
+	spinnerStyle          = lipgloss.NewStyle().Foreground(lipgloss.Color(mochaMauve))
+	userPrefixStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color(mochaBlue)).Bold(true)
+	llmPrefixStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color(mochaMauve)).Bold(true)
+	reasoningTextStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color(mochaSubtext0)).Italic(true)
+	reasoningSpinnerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(mochaOverlay2)).Faint(true)
 
 	itemStyle         = lipgloss.NewStyle().Padding(0, 1)
 	selectedItemStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(mochaLavender)).Bold(true).Padding(0, 1)
