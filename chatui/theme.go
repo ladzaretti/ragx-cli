@@ -4,14 +4,16 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-const ascii = `          ▗ 
-▛▘▀▌▛▌▛▘▀▌▜▘
-▌ █▌▙▌▌ █▌▐▖
-    ▄▌      
-`
+const (
+	asciiLines = 6
 
-// TODO: bigger ascci art for when window is big.
-// TODO2: toggle thinking
+	ascii = `██╗      ██████╗  █████╗  ██████╗ ██████╗  █████╗ ████████╗
+╚██╗     ██╔══██╗██╔══██╗██╔════╝ ██╔══██╗██╔══██╗╚══██╔══╝
+ ╚██╗    ██████╔╝███████║██║  ███╗██████╔╝███████║   ██║   
+ ██╔╝    ██╔══██╗██╔══██║██║   ██║██╔══██╗██╔══██║   ██║   
+██╔╝     ██║  ██║██║  ██║╚██████╔╝██║  ██║██║  ██║   ██║   
+╚═╝      ╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝`
+)
 
 var asciiComponentView = lipgloss.NewStyle().
 	Foreground(lipgloss.Color(mochaLavender)). // or mochaBlue

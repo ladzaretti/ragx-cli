@@ -22,7 +22,7 @@ import (
 const (
 	listWidth     = 24
 	textareaHight = 2
-	extraLines    = 7 // 5L ascii + 1L spinner + 1L status bar
+	extraLines    = 2 // 1L spinner + 1L status bar
 
 	reasoningStartTag = "<think>"
 	reasoningEndTag   = "</think>"
@@ -60,6 +60,7 @@ type model struct {
 	reasoning     bool
 	reasoningDone bool
 	reasoningShow bool
+	asciiShow     bool
 	selectedModel string
 	cancel        context.CancelFunc // cancel for the in-flight LLM request
 	lastErr       string             // shown in footer when non-empty
@@ -204,6 +205,8 @@ func New(client *llm.Client, chat *llm.ChatSession, vecdb *vecdb.VectorDB, confi
 		textarea:        ta,
 		spinner:         spinnerPlain,
 		thinkingSpinner: spinnerThinking,
+		reasoningShow:   false,
+		asciiShow:       true,
 		legendHeight:    1,
 		currentFocus:    focusTextarea,
 	}
@@ -330,12 +333,12 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:cyclop
 }
 
 func (m *model) View() string {
-	leftSide := lipgloss.JoinVertical(lipgloss.Left,
-		asciiComponentView,
-		m.viewport.View(),
-	)
+	left := []string{m.viewport.View()}
+	if m.asciiShow {
+		left = append([]string{asciiComponentView}, left...)
+	}
 
-	main := leftSide
+	main := lipgloss.JoinVertical(lipgloss.Left, left...)
 
 	modeLabel, legendItemStyle := m.currentFocus.String(), m.currentFocus.style()
 	if m.leaderActive {
@@ -446,11 +449,28 @@ func (m *model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// FIXME1: use all available width of the screen.
+// FIXME2: do not abort when discovering on perm/utf8 issues
+// TODO: dry run for inspecting embedded data and user prompt.
+// TODO1: tokenizer, and token control.
+// TODO2: support multiple baseUrl+pass combos.
+// TODO3: persist db + watch functionality
+
 //nolint:unparam
 var leaderMap = map[string]func(*model) (tea.Model, tea.Cmd){
 	"q": func(m *model) (tea.Model, tea.Cmd) { return m, tea.Quit },
 	"h": func(m *model) (tea.Model, tea.Cmd) { m.focus(focusViewport); return m, nil },
 	"m": func(m *model) (tea.Model, tea.Cmd) { m.focus(focusModelList); return m, nil },
+	"a": func(m *model) (tea.Model, tea.Cmd) {
+		m.asciiShow = !m.asciiShow
+		m.focus(focusTextarea)
+
+		resize := func() tea.Msg {
+			return tea.WindowSizeMsg{Width: m.width, Height: m.height}
+		}
+
+		return m, tea.Batch(textinput.Blink, resize)
+	},
 	"r": func(m *model) (tea.Model, tea.Cmd) {
 		m.reasoningShow = !m.reasoningShow
 		m.focus(focusTextarea)
@@ -574,7 +594,12 @@ func (m *model) resize(w tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 
 	m.legendHeight = lipgloss.Height(m.legendWrapped)
 
-	availHeight := w.Height - m.textarea.Height() - m.legendHeight - extraLines
+	reserved := extraLines
+	if m.asciiShow {
+		reserved += asciiLines
+	}
+
+	availHeight := w.Height - m.textarea.Height() - m.legendHeight - reserved
 
 	m.viewport.Height = max(availHeight, 1)
 	m.modelList.SetSize(m.listWidth, availHeight)
@@ -638,9 +663,10 @@ func (m *model) legend() string {
 			legendItem("H", "HISTORY"), divider,
 			legendItem("R", m.reasoningLegendLabel()), divider,
 			legendItem("M", "CHANGE MODEL"), divider,
-			legendItem("L", "CLEAR CHAT"), divider,
+			legendItem("L", "CLEAR"), divider,
+			legendItem("A", m.asciiLegendLabel()), divider,
 			legendItem("Q", "QUIT"), divider,
-			legendItem("ESC", "CANCEL LEADER"),
+			legendItem("ESC", "CANCEL"),
 		)
 
 	case m.currentFocus == focusModelList:
@@ -733,4 +759,12 @@ func (m *model) reasoningLegendLabel() string {
 	}
 
 	return "SHOW REASONING"
+}
+
+func (m *model) asciiLegendLabel() string {
+	if m.reasoningShow {
+		return "HIDE ASCII"
+	}
+
+	return "SHOW ASCII"
 }
