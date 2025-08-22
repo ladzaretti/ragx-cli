@@ -449,8 +449,6 @@ func (m *model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// FIXME1: use all available width of the screen.
-// FIXME2: do not abort when discovering on perm/utf8 issues
 // TODO: dry run for inspecting embedded data and user prompt.
 // TODO1: tokenizer, and token control.
 // TODO2: support multiple baseUrl+pass combos.
@@ -584,8 +582,8 @@ func (m *model) sendPrompt(q string) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) resize(w tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
-	vpWidth := max(w.Width-m.listWidth, 1)
-	m.viewport.Width = vpWidth
+	vpWidth := max(w.Width, 1)
+	m.viewport.Width = w.Width
 
 	m.textarea.SetWidth(vpWidth)
 	m.textarea.SetHeight(textareaHight)

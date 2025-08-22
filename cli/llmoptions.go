@@ -47,7 +47,7 @@ func (o *llmOptions) embed(ctx context.Context, logger *slog.Logger, r io.Reader
 	case r != nil:
 		return o.embedInput(ctx, logger, spinner.sendStatusWithEllipsis, r)
 	case len(args) > 0:
-		return o.discoverAndEmbed(ctx, logger, spinner.sendStatus, matchREs, args...)
+		return o.discoverAndEmbed(ctx, logger, spinner.display, spinner.setStatus, matchREs, args...)
 	default:
 	}
 
@@ -82,7 +82,7 @@ func (o *llmOptions) embedInput(ctx context.Context, logger *slog.Logger, sendSt
 	return nil
 }
 
-func (o *llmOptions) discoverAndEmbed(ctx context.Context, logger *slog.Logger, status func(string), matchREs []*regexp.Regexp, args ...string) error {
+func (o *llmOptions) discoverAndEmbed(ctx context.Context, logger *slog.Logger, display func(text string), status func(string), matchREs []*regexp.Regexp, args ...string) error {
 	defer func(start time.Time) {
 		elapsed := time.Since(start)
 		logger.Debug("embedding total duration", "duration", elapsed)
@@ -93,7 +93,7 @@ func (o *llmOptions) discoverAndEmbed(ctx context.Context, logger *slog.Logger, 
 		return err
 	}
 
-	chunkedFiles, err := chunkFiles(ctx, discovered,
+	chunkedFiles, err := chunkFiles(ctx, display, discovered,
 		o.embeddingConfig.ChunkSize,
 		o.embeddingConfig.Overlap,
 	)

@@ -128,7 +128,7 @@ type dataChunks struct {
 	chunks []string
 }
 
-func chunkFiles(ctx context.Context, paths []string, chunkSize, overlap int) ([]*dataChunks, error) {
+func chunkFiles(ctx context.Context, display func(text string), paths []string, chunkSize, overlap int) ([]*dataChunks, error) {
 	chunked := make([]*dataChunks, 0, len(paths))
 
 	for _, path := range paths {
@@ -140,7 +140,8 @@ func chunkFiles(ctx context.Context, paths []string, chunkSize, overlap int) ([]
 
 		chunks, err := chunkFile(path, chunkSize, overlap)
 		if err != nil {
-			return nil, err
+			display(fmt.Sprintf("skipping %q: %v", path, err))
+			continue
 		}
 
 		chunked = append(chunked, chunks)
@@ -152,11 +153,11 @@ func chunkFiles(ctx context.Context, paths []string, chunkSize, overlap int) ([]
 func chunkFile(path string, chunkSize, overlap int) (*dataChunks, error) {
 	b, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
-		return nil, fmt.Errorf("read file %q: %w", path, err)
+		return nil, fmt.Errorf("read file: %w", err)
 	}
 
 	if !utf8.Valid(b) {
-		return nil, fmt.Errorf("skipping non-utf-8 file: %q", path)
+		return nil, errors.New("non-utf-8 file")
 	}
 
 	if bytes.HasPrefix(b, []byte{0xEF, 0xBB, 0xBF}) { // Strip BOM
@@ -165,11 +166,11 @@ func chunkFile(path string, chunkSize, overlap int) (*dataChunks, error) {
 
 	chunks, err := ChunkText(string(b), chunkSize, overlap)
 	if err != nil {
-		return nil, fmt.Errorf("chunk %q: %w", path, err)
+		return nil, fmt.Errorf("chunk text: %w", err)
 	}
 
 	if len(chunks) == 0 {
-		return nil, fmt.Errorf("skipping empty file: %q", path)
+		return nil, errors.New("empty file")
 	}
 
 	return &dataChunks{

@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 const (
@@ -44,14 +45,17 @@ func (e *ellipsis) String() string {
 // updateStatusMsg is the message sent into the Bubble Tea
 // event loop to change status.
 type updateStatusMsg struct {
-	text         string
+	status       string
 	showEllipsis bool
 }
+
+type displayTextMsg struct{ text string }
 
 // spinnerModel is the Bubble Tea model that renders the spinner and status suffix.
 type spinnerModel struct {
 	spinner  spinner.Model
 	cancel   func()
+	text     []string
 	status   string
 	ellipsis *ellipsis
 }
@@ -60,7 +64,18 @@ var _ tea.Model = &spinnerModel{}
 
 func (m spinnerModel) Init() tea.Cmd { return m.spinner.Tick }
 
-func (m spinnerModel) View() string { return m.spinner.View() + m.status + m.ellipsis.String() }
+func (m spinnerModel) View() string {
+	lines := make([]string, 0, len(m.text)+1)
+	spin := m.spinner.View() + m.status + m.ellipsis.String()
+
+	if len(m.text) > 0 {
+		lines = append(lines, m.text...)
+	}
+
+	lines = append(lines, spin)
+
+	return lipgloss.JoinVertical(lipgloss.Left, lines...)
+}
 
 func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -72,8 +87,13 @@ func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			return m, tea.Quit
 		}
+
+	case displayTextMsg:
+		m.text = append(m.text, msg.text)
+		return m, nil
+
 	case updateStatusMsg:
-		m.status = msg.text
+		m.status = msg.status
 		m.ellipsis.show(msg.showEllipsis)
 
 		return m, nil
@@ -124,8 +144,12 @@ func (s *spinnerProg) stop() {
 	})
 }
 
-func (s *spinnerProg) sendStatus(text string) { s.prog.Send(updateStatusMsg{text: text}) }
+func (s *spinnerProg) display(text string) {
+	s.prog.Send(displayTextMsg{text})
+}
+
+func (s *spinnerProg) setStatus(text string) { s.prog.Send(updateStatusMsg{status: text}) }
 
 func (s *spinnerProg) sendStatusWithEllipsis(text string) {
-	s.prog.Send(updateStatusMsg{text: text, showEllipsis: true})
+	s.prog.Send(updateStatusMsg{status: text, showEllipsis: true})
 }
