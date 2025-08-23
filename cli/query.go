@@ -23,7 +23,8 @@ type QueryOptions struct {
 	*genericclioptions.StdioOptions
 	llmOptions *llmOptions
 
-	query string
+	query  string
+	dryRun bool
 }
 
 var _ genericclioptions.CmdOptions = &QueryOptions{}
@@ -103,6 +104,13 @@ func (o *QueryOptions) Run(ctx context.Context, args ...string) error {
 	p, err := prompt.BuildUserPrompt(o.query, hits, prompt.DecodeMeta, opts...)
 	if err != nil {
 		return errf("build user prompt: %w", err)
+	}
+
+	if o.dryRun {
+		spinner.stop()
+		o.Print(p + "\n")
+
+		return nil
 	}
 
 	ch := prompt.SendStream(ctx, o.llmOptions.session, selectedModel, p)
@@ -217,7 +225,8 @@ If no -M filter is given, all files under the provided paths are embedded.`,
 		},
 	}
 
-	cmd.Flags().StringVarP(&o.query, "query", "q", "", "query text (optional; can also use positional args)")
+	cmd.Flags().StringVarP(&o.query, "query", "q", "", "set query text (can also be given positionally)")
+	cmd.Flags().BoolVarP(&o.dryRun, "dry-run", "n", false, "print retrieval plan and the final prompt without calling the LLM")
 
 	return cmd
 }
