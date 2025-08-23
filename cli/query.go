@@ -71,16 +71,21 @@ func (o *QueryOptions) Run(ctx context.Context, args ...string) error {
 	defer spinner.stop()
 
 	var (
-		selectedModel  = o.llmOptions.chatConfig.Model
+		selectedModel  = o.llmOptions.llmConfig.DefaultModel
 		embeddingModel = o.llmOptions.embeddingConfig.EmbeddingModel
 		topK           = o.llmOptions.embeddingConfig.TopK
 	)
+
+	provider, err := o.llmOptions.providers.ProviderFor(embeddingModel)
+	if err != nil {
+		return fmt.Errorf("provider for: %w", err)
+	}
 
 	setStatus := spinner.sendStatusWithEllipsis
 
 	setStatus("embedding query")
 
-	q, err := o.llmOptions.client.Embed(ctx, llm.EmbedRequest{
+	q, err := provider.Client.Embed(ctx, llm.EmbedRequest{
 		Input: o.query,
 		Model: embeddingModel,
 	})
@@ -113,7 +118,7 @@ func (o *QueryOptions) Run(ctx context.Context, args ...string) error {
 		return nil
 	}
 
-	ch := prompt.SendStream(ctx, o.llmOptions.session, selectedModel, p)
+	ch := prompt.SendStream(ctx, provider.Session, selectedModel, p)
 
 	if err := drainStream(ctx, ch, o.Print, setStatus, spinner.stop); err != nil {
 		return fmt.Errorf("response stream: %w", err)
@@ -226,7 +231,7 @@ If no -M filter is given, all files under the provided paths are embedded.`,
 	}
 
 	cmd.Flags().StringVarP(&o.query, "query", "q", "", "set query text (can also be given positionally)")
-	cmd.Flags().BoolVarP(&o.dryRun, "dry-run", "n", false, "print retrieval plan and the final prompt without calling the LLM")
+	cmd.Flags().BoolVarP(&o.dryRun, "dry-run", "", false, "print retrieval plan and the final prompt without calling the LLM")
 
 	return cmd
 }

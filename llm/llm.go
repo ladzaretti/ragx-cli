@@ -11,7 +11,6 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"os"
 	"strings"
 
 	openai "github.com/openai/openai-go/v2"
@@ -78,12 +77,7 @@ func WithTemperature(t float64) Option {
 
 // NewClient creates a new OpenAI client.
 func NewClient(opts ...Option) (*Client, error) {
-	c := &config{
-		baseURL: os.Getenv("OPENAI_API_BASE"),
-		apiKey:  os.Getenv("OPENAI_API_KEY"),
-		model:   os.Getenv("OPENAI_MODEL"),
-		logger:  slog.Default(),
-	}
+	c := &config{}
 
 	for _, opt := range opts {
 		opt(c)
@@ -249,7 +243,6 @@ type ChatSession struct {
 	logger      *slog.Logger
 	client      *Client
 	history     []openai.ChatCompletionMessageParamUnion
-	model       string
 	temperature float64
 }
 
@@ -270,7 +263,7 @@ func WithSessionTemperature(t float64) SessionOpt {
 }
 
 // NewChat creates a new chat session with optional system prompt.
-func NewChat(c *Client, systemPrompt, model string, opts ...SessionOpt) (*ChatSession, error) {
+func NewChat(c *Client, systemPrompt string, opts ...SessionOpt) (*ChatSession, error) {
 	session := &ChatSession{
 		client: c,
 		logger: slog.Default(),
@@ -280,22 +273,12 @@ func NewChat(c *Client, systemPrompt, model string, opts ...SessionOpt) (*ChatSe
 		o(session)
 	}
 
-	logger := session.logger
-
-	model, err := c.selectModel(model)
-	if err != nil {
-		return nil, err
-	}
-
-	logger.Info("start chat session", "model", model)
-
 	history := []openai.ChatCompletionMessageParamUnion{}
 	if systemPrompt != "" {
 		history = append(history, openai.SystemMessage(systemPrompt))
 	}
 
 	session.history = history
-	session.model = model
 
 	return session, nil
 }
@@ -309,20 +292,11 @@ type ChatResponse struct {
 	Usage   any
 }
 
-func (s *ChatSession) selectModel(override string) (string, error) {
-	if m := cmp.Or(override, s.model); m != "" {
-		return m, nil
-	}
-
-	return "", ErrNoModelSelected
-}
-
 // Send sends user messages and returns a response.
 // The assistant's reply is appended to the internal history.
 func (s *ChatSession) Send(ctx context.Context, model string, contents ...string) (*ChatResponse, error) {
-	model, err := s.selectModel(model)
-	if err != nil {
-		return nil, err
+	if model == "" {
+		return nil, ErrNoModelSelected
 	}
 
 	s.logger.Info("send chat turn", "model", model, "history_len", len(s.history))
@@ -371,9 +345,8 @@ func (s *ChatSession) Send(ctx context.Context, model string, contents ...string
 // SendStreaming sends user messages and returns a streaming response iterator.
 // The assistant's full reply is added to history after streaming completes.
 func (s *ChatSession) SendStreaming(ctx context.Context, model string, contents ...string) (ChatResponseIterator, error) {
-	model, err := s.selectModel(model)
-	if err != nil {
-		return nil, err
+	if model == "" {
+		return nil, ErrNoModelSelected
 	}
 
 	s.logger.Info("start streaming request", "model", model)

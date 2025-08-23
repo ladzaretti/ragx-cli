@@ -8,24 +8,23 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/ladzaretti/ragrat/cli/types"
 	"github.com/ladzaretti/ragrat/genericclioptions"
 	"github.com/ladzaretti/ragrat/llm"
 	"github.com/ladzaretti/ragrat/vecdb"
+
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
 )
 
 type llmOptions struct {
-	client   *llm.Client
-	session  *llm.ChatSession
-	vectordb *vecdb.VectorDB
-
+	llmConfig       LLMConfig
 	promptConfig    PromptConfig
 	embeddingConfig EmbeddingConfig
-	chatConfig      LLMConfig
 
-	availableModels []string
-	embeddingREs    []*regexp.Regexp
+	providers    types.Providers
+	vectordb     *vecdb.VectorDB
+	embeddingREs []*regexp.Regexp
 }
 
 var _ genericclioptions.BaseOptions = &llmOptions{}
@@ -33,6 +32,31 @@ var _ genericclioptions.BaseOptions = &llmOptions{}
 func (*llmOptions) Complete() error { return nil }
 
 func (*llmOptions) Validate() error { return nil }
+
+func (o *llmOptions) initProviders(logger *slog.Logger) error {
+	o.providers = make([]*types.Provider, 0, len(o.llmConfig.Providers))
+
+	for _, c := range o.llmConfig.Providers {
+		client, err := createClient(logger, c)
+		if err != nil {
+			return err
+		}
+
+		session, err := createSession(logger, client, c.Temperature, o.promptConfig.System)
+		if err != nil {
+			return err
+		}
+
+		p := &types.Provider{
+			Client:  client,
+			Session: session,
+		}
+
+		o.providers = append(o.providers, p)
+	}
+
+	return nil
+}
 
 func (o *llmOptions) embed(ctx context.Context, logger *slog.Logger, r io.Reader, matchREs []*regexp.Regexp, args ...string) error {
 	ctx, cancel := context.WithCancel(ctx)
@@ -128,6 +152,12 @@ func (o *llmOptions) embedAll(ctx context.Context, logger *slog.Logger, sendStat
 
 func (o *llmOptions) embedData(ctx context.Context, logger *slog.Logger, cf *dataChunks) error {
 	n := len(cf.chunks)
+	embeddingModel := o.embeddingConfig.EmbeddingModel
+
+	provider, err := o.providers.ProviderFor(embeddingModel)
+	if err != nil {
+		return fmt.Errorf("provider for: %w", err)
+	}
 
 	for i := 0; i < n; i += embedBatchSize {
 		end := min(i+embedBatchSize, n)
@@ -137,7 +167,7 @@ func (o *llmOptions) embedData(ctx context.Context, logger *slog.Logger, cf *dat
 			Model: o.embeddingConfig.EmbeddingModel,
 		}
 
-		res, err := o.client.EmbedBatch(ctx, req)
+		res, err := provider.Client.EmbedBatch(ctx, req)
 		if err != nil {
 			return fmt.Errorf("embed batch [%d:%d]: %w", i, end, err)
 		}
@@ -170,6 +200,43 @@ func (o *llmOptions) embedData(ctx context.Context, logger *slog.Logger, cf *dat
 	}
 
 	return nil
+}
+
+func createClient(logger *slog.Logger, c ProviderConfig) (*llm.Client, error) {
+	opts := []llm.Option{
+		llm.WithBaseURL(c.BaseURL),
+		llm.WithLogger(logger),
+	}
+
+	temperature := c.Temperature
+
+	if temperature != 0.0 {
+		opts = append(opts, llm.WithTemperature(temperature))
+	}
+
+	client, err := llm.NewClient(opts...)
+	if err != nil {
+		return nil, errf("new client: %v", err)
+	}
+
+	return client, nil
+}
+
+func createSession(logger *slog.Logger, client *llm.Client, temperature float64, systemPrompt string) (*llm.ChatSession, error) {
+	sessionOpts := []llm.SessionOpt{
+		llm.WithSessionLogger(logger),
+	}
+
+	if temperature != 0.0 {
+		sessionOpts = append(sessionOpts, llm.WithSessionTemperature(temperature))
+	}
+
+	session, err := llm.NewChat(client, systemPrompt, sessionOpts...)
+	if err != nil {
+		return nil, errf("new chat session: %v", err)
+	}
+
+	return session, nil
 }
 
 func toFloat32Slice(src []float64) (f32 []float32) {

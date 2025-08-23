@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"strings"
 
 	"github.com/ladzaretti/ragrat/clierror"
 	"github.com/ladzaretti/ragrat/genericclioptions"
@@ -28,8 +29,19 @@ func (*ListModelsOptions) Complete() error { return nil }
 func (*ListModelsOptions) Validate() error { return nil }
 
 func (o *ListModelsOptions) Run(_ context.Context, _ ...string) error {
-	for _, m := range o.availableModels {
-		o.Print(m + "\n")
+	for i, p := range o.providers {
+		baseURL, models := o.llmConfig.Providers[i].BaseURL, p.AvailableModels
+
+		if i != 0 {
+			o.Print("\n") // space out providers
+		}
+
+		out := strings.Join(
+			append([]string{baseURL}, models...),
+			"\n\t",
+		)
+
+		o.Print(out + "\n")
 	}
 
 	return nil

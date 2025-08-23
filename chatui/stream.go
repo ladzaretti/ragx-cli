@@ -32,15 +32,18 @@ func waitChunk(ch <-chan chunk) tea.Cmd {
 
 func (m *model) startRAGCmd(ctx context.Context, query string) tea.Cmd {
 	var (
-		client   = m.client
-		chat     = m.chat
 		vdb      = m.vecdb
 		llmModel = m.selectedModel
 		config   = m.config
 	)
 
+	provider, err := m.providers.ProviderFor(m.selectedModel)
+	if err != nil {
+		return func() tea.Msg { return ragErr{err} }
+	}
+
 	return func() tea.Msg {
-		q, err := client.Embed(ctx, llm.EmbedRequest{Input: query, Model: config.EmbeddingModel})
+		q, err := provider.Client.Embed(ctx, llm.EmbedRequest{Input: query, Model: config.EmbeddingModel})
 		if err != nil {
 			return ragErr{err}
 		}
@@ -59,7 +62,7 @@ func (m *model) startRAGCmd(ctx context.Context, query string) tea.Cmd {
 			return ragErr{err}
 		}
 
-		ch := prompt.SendStream(ctx, chat, llmModel, p)
+		ch := prompt.SendStream(ctx, provider.Session, llmModel, p)
 
 		return ragReady{ch: ch}
 	}

@@ -5,6 +5,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -22,14 +23,34 @@ type configOptions struct {
 
 	flags *Flags
 
+	envConfig  EnvConfig
 	fileConfig *Config
 	resolved   *Config
+}
+
+type EnvConfig struct {
+	providers []ProviderConfig
+}
+
+func (env *EnvConfig) load() { env.providers = providersFromEnv() }
+
+func providersFromEnv() []ProviderConfig {
+	baseURL, ok := os.LookupEnv("OPENAI_API_BASE")
+	if !ok {
+		return nil
+	}
+
+	openai := ProviderConfig{
+		BaseURL: baseURL,
+		APIKey:  os.Getenv("OPENAI_API_KEY"),
+	}
+
+	return []ProviderConfig{openai}
 }
 
 // Flags holds cli overrides for configuration.
 type Flags struct {
 	configPath     string
-	baseURL        string
 	model          string
 	embeddingModel string
 	dimensions     int
@@ -63,7 +84,17 @@ func (o *configOptions) Complete() error {
 		return err
 	}
 
+	o.envConfig.load()
+
 	o.fileConfig = c
+
+	if err := o.resolve(); err != nil {
+		return err
+	}
+
+	if len(o.resolved.LLMConfig.Providers) == 0 {
+		o.resolved.LLMConfig.Providers = append(o.resolved.LLMConfig.Providers, defaultProvider)
+	}
 
 	return o.resolve()
 }
@@ -73,29 +104,32 @@ func (o *configOptions) resolve() error {
 
 	o.resolved.path = cmp.Or(o.flags.configPath, o.fileConfig.path)
 
-	o.resolved.LLM.BaseURL = cmp.Or(os.Getenv("OPENAI_API_BASE"), o.flags.baseURL, o.fileConfig.LLM.BaseURL)
-	o.resolved.LLM.APIKey = cmp.Or(os.Getenv("OPENAI_API_KEY"), o.fileConfig.LLM.APIKey)
-	o.resolved.LLM.Model = cmp.Or(os.Getenv("OPENAI_MODEL"), o.flags.model, o.fileConfig.LLM.Model)
+	o.resolved.LLMConfig.DefaultModel = cmp.Or(o.flags.model, o.fileConfig.LLMConfig.DefaultModel)
+	o.resolved.LLMConfig.Providers = append(o.resolved.LLMConfig.Providers, o.envConfig.providers...)
 
-	o.resolved.Prompt.System = cmp.Or(o.fileConfig.Prompt.System, prompt.DefaultSystemPrompt)
-	o.resolved.Prompt.UserPromptTmpl = cmp.Or(o.fileConfig.Prompt.UserPromptTmpl, prompt.DefaultUserPromptTmpl)
+	o.resolved.PromptConfig.System = cmp.Or(o.fileConfig.PromptConfig.System, prompt.DefaultSystemPrompt)
+	o.resolved.PromptConfig.UserPromptTmpl = cmp.Or(o.fileConfig.PromptConfig.UserPromptTmpl, prompt.DefaultUserPromptTmpl)
 
-	o.resolved.Embedding.EmbeddingModel = cmp.Or(o.flags.embeddingModel, o.fileConfig.Embedding.EmbeddingModel)
-	o.resolved.Embedding.Dimensions = cmp.Or(o.flags.dimensions, o.fileConfig.Embedding.Dimensions)
+	o.resolved.EmbeddingConfig.EmbeddingModel = cmp.Or(o.flags.embeddingModel, o.fileConfig.EmbeddingConfig.EmbeddingModel)
+	o.resolved.EmbeddingConfig.Dimensions = cmp.Or(o.flags.dimensions, o.fileConfig.EmbeddingConfig.Dimensions)
 
-	o.resolved.Logging.Dir = cmp.Or(o.flags.logDir, o.fileConfig.Logging.Dir)
-	o.resolved.Logging.Filename = cmp.Or(o.flags.logFilename, o.fileConfig.Logging.Filename)
-	o.resolved.Logging.Level = cmp.Or(os.Getenv("LOG_LEVEL"), o.flags.logLevel, o.fileConfig.Logging.Level)
+	o.resolved.LoggingConfig.Dir = cmp.Or(o.flags.logDir, o.fileConfig.LoggingConfig.Dir)
+	o.resolved.LoggingConfig.Filename = cmp.Or(o.flags.logFilename, o.fileConfig.LoggingConfig.Filename)
+	o.resolved.LoggingConfig.Level = cmp.Or(os.Getenv("LOG_LEVEL"), o.flags.logLevel, o.fileConfig.LoggingConfig.Level)
 
 	return nil
 }
 
-func (o *configOptions) Validate() error {
-	if _, err := genericclioptions.ParseLevel(o.resolved.Logging.Level); err != nil {
+func (o *configOptions) Validate() (retErr error) {
+	if _, err := genericclioptions.ParseLevel(o.resolved.LoggingConfig.Level); err != nil {
 		return err
 	}
 
-	return nil
+	for _, p := range o.envConfig.providers {
+		retErr = errors.Join(retErr, p.validate())
+	}
+
+	return
 }
 
 func (*configOptions) Run(context.Context, ...string) error { return nil }

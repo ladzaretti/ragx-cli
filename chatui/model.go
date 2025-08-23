@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ladzaretti/ragrat/llm"
+	"github.com/ladzaretti/ragrat/cli/types"
 	"github.com/ladzaretti/ragrat/vecdb"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -40,10 +40,9 @@ type model struct {
 
 	// chat session
 
-	chat   *llm.ChatSession
-	client *llm.Client
-	vecdb  *vecdb.VectorDB
-	config ModelConfig
+	providers types.Providers
+	vecdb     *vecdb.VectorDB
+	config    ModelConfig
 
 	historyBuilder   strings.Builder
 	responseBuilder  strings.Builder
@@ -126,14 +125,13 @@ func (m *model) focus(f focus) {
 
 type ModelConfig struct {
 	TopK           int
-	Models         []string
 	ChatModel      string
 	EmbeddingModel string
 	UserPromptTmpl string
 }
 
 // New creates a new [model].
-func New(client *llm.Client, chat *llm.ChatSession, vecdb *vecdb.VectorDB, config ModelConfig) *model {
+func New(providers types.Providers, vecdb *vecdb.VectorDB, config ModelConfig) *model {
 	ta := textarea.New()
 	ta.Placeholder = "Ask anything\n(Press Ctrl+S to submit)"
 	ta.Focus()
@@ -162,20 +160,22 @@ func New(client *llm.Client, chat *llm.ChatSession, vecdb *vecdb.VectorDB, confi
 		FPS: time.Second / 4,
 	}))
 
-	items := make([]list.Item, 0, len(config.Models))
+	items := make([]list.Item, 0, 32)
 	longest := 0
 
-	selectedIndex := 0
-	for i, m := range config.Models {
-		if l := lipgloss.Width(m); l > longest {
-			longest = l
-		}
+	selectedIndex, selectedModel := 0, config.ChatModel
+	for i, p := range providers {
+		for j, m := range p.AvailableModels {
+			if l := lipgloss.Width(m); l > longest {
+				longest = l
+			}
 
-		if m == config.ChatModel {
-			selectedIndex = i
-		}
+			if m == selectedModel {
+				selectedIndex = i + j
+			}
 
-		items = append(items, listItem(m))
+			items = append(items, listItem(m))
+		}
 	}
 
 	// ensure we have enough width to show the longest model name, capped at 40.
@@ -194,11 +194,10 @@ func New(client *llm.Client, chat *llm.ChatSession, vecdb *vecdb.VectorDB, confi
 		Background(lipgloss.Color(mochaSurface0))
 
 	return &model{
-		client:          client,
-		chat:            chat,
+		providers:       providers,
 		vecdb:           vecdb,
 		config:          config,
-		selectedModel:   config.Models[selectedIndex],
+		selectedModel:   selectedModel,
 		viewport:        viewport.New(0, 0),
 		modelList:       lm,
 		listWidth:       lw,
@@ -449,9 +448,8 @@ func (m *model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// TODO: dry run for inspecting embedded data and user prompt.
-// TODO1: tokenizer, and token control.
-// TODO2: support multiple baseUrl+pass combos.
+// TODO1: extract history out off the llm client/chat
+// TODO2: tokenizer, and token control.
 // TODO3: persist db + watch functionality
 
 //nolint:unparam

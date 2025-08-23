@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,19 +25,68 @@ func (e *ConfigError) Error() string {
 func (e *ConfigError) Unwrap() error { return e.Err }
 
 type Config struct {
-	LLM       LLMConfig        `json:"llm"                 toml:"llm"`
-	Prompt    *PromptConfig    `json:"prompt,omitempty"    toml:"prompt,omitempty"`
-	Embedding *EmbeddingConfig `json:"embedding,omitempty" toml:"embedding,omitempty"`
-	Logging   *LoggingConfig   `json:"logging,omitempty"   toml:"logging,commented"`
+	LLMConfig       LLMConfig        `json:"llm"                 toml:"llm"`
+	PromptConfig    *PromptConfig    `json:"prompt,omitempty"    toml:"prompt,omitempty"`
+	EmbeddingConfig *EmbeddingConfig `json:"embedding,omitempty" toml:"embedding,omitempty"`
+	LoggingConfig   *LoggingConfig   `json:"logging,omitempty"   toml:"logging,commented"`
 
 	path string // path to the loaded config file. Empty if no config file was used.
 }
 
 type LLMConfig struct {
+	Providers    []ProviderConfig `json:"providers,omitempty" toml:"providers,commented" comment:"llm providers"`
+	DefaultModel string           `json:"model,omitempty"     toml:"model,commented"     comment:"Default model to use"`
+}
+
+type ProviderConfig struct {
 	BaseURL     string  `json:"base_url"              toml:"base_url"              comment:"Base URL for the LLM server (e.g., Ollama, OpenAI API-compatible)"`
 	APIKey      string  `json:"api_key,omitempty"     toml:"api_key,commented"     comment:"Optional API key if required"`
-	Model       string  `json:"model"                 toml:"model,commented"       comment:"Default model to use"`
 	Temperature float64 `json:"temperature,omitempty" toml:"temperature,commented" comment:"Completion temperature"`
+}
+
+func (p ProviderConfig) validate() error {
+	errs := make([]error, 0, 2)
+
+	u, err := url.Parse(p.BaseURL)
+	if err != nil {
+		errs = append(errs, &ConfigError{
+			Opt: "base_url",
+			Err: err,
+		})
+	} else {
+		if u.Host == "" {
+			errs = append(errs, &ConfigError{
+				Opt: "base_url",
+				Err: errors.New("missing host"),
+			})
+		}
+
+		if u.RawQuery != "" || u.Fragment != "" {
+			errs = append(errs, &ConfigError{
+				Opt: "base_url",
+				Err: errors.New("must not include query parameters or fragments"),
+			})
+		}
+
+		if u.Path != "/v1" {
+			errs = append(errs, &ConfigError{
+				Opt: "base_url",
+				Err: fmt.Errorf(
+					`must point to the OpenAI-compatible v1 root and end with "/v1" (got path %q). Example: https://api.openai.com/v1`,
+					u.Path,
+				),
+			})
+		}
+	}
+
+	if p.Temperature < 0 || p.Temperature > 2 {
+		errs = append(errs, &ConfigError{
+			Opt: "temperature",
+			Err: errors.New("must be between 0 and 2"),
+		})
+	}
+
+	return errors.Join(errs...)
 }
 
 type PromptConfig struct {
@@ -60,10 +110,10 @@ type LoggingConfig struct {
 
 func newFileConfig() *Config {
 	return &Config{
-		LLM:       LLMConfig{},
-		Prompt:    &PromptConfig{},
-		Embedding: &EmbeddingConfig{},
-		Logging:   &LoggingConfig{},
+		LLMConfig:       LLMConfig{},
+		PromptConfig:    &PromptConfig{},
+		EmbeddingConfig: &EmbeddingConfig{},
+		LoggingConfig:   &LoggingConfig{},
 	}
 }
 
@@ -82,15 +132,13 @@ func (c *Config) setDefaults() error {
 		return &ConfigError{Opt: "logging.log_dir", Err: err}
 	}
 
-	c.Logging.Dir = cmp.Or(c.Logging.Dir, dir)
-	c.Logging.Filename = cmp.Or(c.Logging.Filename, defaultLogFilename)
-	c.Logging.Level = cmp.Or(c.Logging.Level, defaultLogLevel)
+	c.LoggingConfig.Dir = cmp.Or(c.LoggingConfig.Dir, dir)
+	c.LoggingConfig.Filename = cmp.Or(c.LoggingConfig.Filename, defaultLogFilename)
+	c.LoggingConfig.Level = cmp.Or(c.LoggingConfig.Level, defaultLogLevel)
 
-	c.LLM.BaseURL = cmp.Or(c.LLM.BaseURL, string(defaultBaseURL))
-
-	c.Embedding.ChunkSize = cmp.Or(c.Embedding.ChunkSize, defaultChunkSize)
-	c.Embedding.Overlap = cmp.Or(c.Embedding.Overlap, int(defaultOverlap))
-	c.Embedding.TopK = cmp.Or(c.Embedding.TopK, defaultTopK)
+	c.EmbeddingConfig.ChunkSize = cmp.Or(c.EmbeddingConfig.ChunkSize, defaultChunkSize)
+	c.EmbeddingConfig.Overlap = cmp.Or(c.EmbeddingConfig.Overlap, int(defaultOverlap))
+	c.EmbeddingConfig.TopK = cmp.Or(c.EmbeddingConfig.TopK, defaultTopK)
 
 	return nil
 }
@@ -100,29 +148,33 @@ func (c *Config) validate() error {
 		return &ConfigError{Err: errors.New("cannot validate a nil config")}
 	}
 
-	if c.LLM.BaseURL == "" {
-		return &ConfigError{Opt: "llm.base_url", Err: errors.New("must be set")}
-	}
-
-	if c.LLM.Temperature < 0 || c.LLM.Temperature > 2 {
-		return &ConfigError{Opt: "llm.temperature", Err: errors.New("must be between 0 and 2")}
-	}
-
-	if strings.Contains(c.Logging.Filename, "/") {
+	if strings.Contains(c.LoggingConfig.Filename, "/") {
 		return &ConfigError{Opt: "logging.log_filename", Err: errors.New("must not contain slashes")}
 	}
 
-	if c.Embedding != nil {
-		if c.Embedding.ChunkSize < 0 {
+	if c.EmbeddingConfig != nil {
+		if c.EmbeddingConfig.ChunkSize < 0 {
 			return &ConfigError{Opt: "retrieval.chunk_size", Err: errors.New("must be zero or positive")}
 		}
 
-		if c.Embedding.TopK < 0 {
+		if c.EmbeddingConfig.TopK < 0 {
 			return &ConfigError{Opt: "retrieval.top_k", Err: errors.New("must be zero or positive")}
 		}
 	}
 
-	return nil
+	return c.validateProviders()
+}
+
+func (c *Config) validateProviders() error {
+	errs := make([]error, 0, len(c.LLMConfig.Providers))
+
+	for i, p := range c.LLMConfig.Providers {
+		if err := p.validate(); err != nil {
+			errs = append(errs, fmt.Errorf("providers[%d]: %w", i, err))
+		}
+	}
+
+	return errors.Join(errs...)
 }
 
 // LoadFileConfig loads the config from the given or default path.

@@ -7,11 +7,9 @@ import (
 	"log/slog"
 	"path/filepath"
 	"regexp"
-	"slices"
 
 	"github.com/ladzaretti/ragrat/clierror"
 	"github.com/ladzaretti/ragrat/genericclioptions"
-	"github.com/ladzaretti/ragrat/llm"
 	"github.com/ladzaretti/ragrat/vecdb"
 
 	"github.com/spf13/cobra"
@@ -50,6 +48,10 @@ const (
 	reasoningStartTag = "<think>"
 	reasoningEndTag   = "</think>"
 )
+
+var defaultProvider = ProviderConfig{
+	BaseURL: defaultBaseURL,
+}
 
 type cleanupFunc func() error
 
@@ -103,9 +105,9 @@ func (o *DefaultRAGOptions) complete() error { //nolint:revive
 		return err
 	}
 
-	o.llmOptions.chatConfig = o.configOptions.resolved.LLM
-	o.llmOptions.promptConfig = *o.configOptions.resolved.Prompt
-	o.llmOptions.embeddingConfig = *o.configOptions.resolved.Embedding
+	o.llmOptions.llmConfig = o.configOptions.resolved.LLMConfig
+	o.llmOptions.promptConfig = *o.configOptions.resolved.PromptConfig
+	o.llmOptions.embeddingConfig = *o.configOptions.resolved.EmbeddingConfig
 	o.llmOptions.embeddingREs = matchREs
 
 	return nil
@@ -136,20 +138,13 @@ func (o *DefaultRAGOptions) planFor(cmd *cobra.Command) {
 	case "query", "chat", "tui":
 		o.addStep(func(_ context.Context, _ ...string) error { return o.initLogger() })
 		o.addStep(func(_ context.Context, _ ...string) error { return validateQueryParams(o) })
-		o.addStep(func(_ context.Context, _ ...string) error { return o.initClient() })
+		o.addStep(func(_ context.Context, _ ...string) error { return o.llmOptions.initProviders(o.Logger) })
 		o.addStep(o.initLLMModels)
-		o.addStep(func(_ context.Context, _ ...string) error {
-			return validateSelectedModels(
-				o.llmOptions.availableModels,
-				o.llmOptions.chatConfig.Model,
-				o.llmOptions.embeddingConfig.EmbeddingModel,
-			)
-		})
-		o.addStep(func(_ context.Context, _ ...string) error { return o.initSession(o.Logger) })
+		o.addStep(func(_ context.Context, _ ...string) error { return validateSelectedModels(o.llmOptions) })
 		o.addStep(o.initVecdb)
 	case "list":
 		o.addStep(func(_ context.Context, _ ...string) error { return o.initLogger() })
-		o.addStep(func(_ context.Context, _ ...string) error { return o.initClient() })
+		o.addStep(func(_ context.Context, _ ...string) error { return o.llmOptions.initProviders(o.Logger) })
 		o.addStep(o.initLLMModels)
 	default:
 	}
@@ -160,8 +155,8 @@ func (o *DefaultRAGOptions) addStep(s step) {
 }
 
 func (o *DefaultRAGOptions) initLogger() error {
-	dir := o.configOptions.resolved.Logging.Dir
-	name := o.configOptions.resolved.Logging.Filename
+	dir := o.configOptions.resolved.LoggingConfig.Dir
+	name := o.configOptions.resolved.LoggingConfig.Filename
 
 	f, err := openLogFile(dir, name)
 	if err != nil {
@@ -170,7 +165,7 @@ func (o *DefaultRAGOptions) initLogger() error {
 
 	o.cleanupFuncs = append(o.cleanupFuncs, func() error { return f.Close() })
 
-	level, _ := genericclioptions.ParseLevel(o.configOptions.resolved.Logging.Level)
+	level, _ := genericclioptions.ParseLevel(o.configOptions.resolved.LoggingConfig.Level)
 	o.SetLevel(level)
 
 	logger := slog.New(slog.NewTextHandler(f, &slog.HandlerOptions{Level: level}))
@@ -180,60 +175,15 @@ func (o *DefaultRAGOptions) initLogger() error {
 	return nil
 }
 
-func (o *DefaultRAGOptions) initClient() error {
-	opts := []llm.Option{
-		llm.WithBaseURL(o.llmOptions.chatConfig.BaseURL),
-		llm.WithLogger(o.Logger),
-	}
-
-	temperature := o.llmOptions.chatConfig.Temperature
-
-	if temperature != 0.0 {
-		opts = append(opts, llm.WithTemperature(temperature))
-	}
-
-	client, err := llm.NewClient(opts...)
-	if err != nil {
-		return errf("new client: %v", err)
-	}
-
-	o.llmOptions.client = client
-
-	return nil
-}
-
-func (o *DefaultRAGOptions) initSession(logger *slog.Logger) error {
-	var (
-		model       = o.llmOptions.chatConfig.Model
-		temperature = o.llmOptions.chatConfig.Temperature
-		system      = o.llmOptions.promptConfig.System
-	)
-
-	sessionOpts := []llm.SessionOpt{
-		llm.WithSessionLogger(logger),
-	}
-
-	if temperature != 0.0 {
-		sessionOpts = append(sessionOpts, llm.WithSessionTemperature(temperature))
-	}
-
-	session, err := llm.NewChat(o.llmOptions.client, system, model, sessionOpts...)
-	if err != nil {
-		return errf("new chat session: %v", err)
-	}
-
-	o.llmOptions.session = session
-
-	return nil
-}
-
 func (o *DefaultRAGOptions) initLLMModels(ctx context.Context, _ ...string) error {
-	m, err := o.llmOptions.client.ListModels(ctx)
-	if err != nil {
-		return errf("llm list models: %v", err)
-	}
+	for _, p := range o.llmOptions.providers {
+		m, err := p.Client.ListModels(ctx)
+		if err != nil {
+			return errf("llm list models: %v", err)
+		}
 
-	o.llmOptions.availableModels = m
+		p.AvailableModels = m
+	}
 
 	return nil
 }
@@ -273,7 +223,6 @@ Embed data, run retrieval, and query local or remote OpenAI API-compatible LLMs.
 
 	cmd.SetArgs(args)
 
-	cmd.PersistentFlags().StringVarP(&o.configOptions.flags.baseURL, "base-url", "u", "", "set LLM base URL")
 	cmd.PersistentFlags().StringVarP(&o.configOptions.flags.model, "model", "m", "", "set LLM model")
 	cmd.PersistentFlags().StringVarP(&o.configOptions.flags.configPath, "config", "c", "", fmt.Sprintf("path to config file (default: ~/%s)", defaultConfigName))
 	cmd.PersistentFlags().StringVarP(&o.configOptions.flags.embeddingModel, "embedding-model", "e", "", "set embedding model")
@@ -308,9 +257,9 @@ Embed data, run retrieval, and query local or remote OpenAI API-compatible LLMs.
 
 func validateQueryParams(o *DefaultRAGOptions) error {
 	var (
-		model          = o.configOptions.resolved.LLM.Model
-		embeddingModel = o.configOptions.resolved.Embedding.EmbeddingModel
-		dim            = o.configOptions.resolved.Embedding.Dimensions
+		model          = o.configOptions.resolved.LLMConfig.DefaultModel
+		embeddingModel = o.configOptions.resolved.EmbeddingConfig.EmbeddingModel
+		dim            = o.configOptions.resolved.EmbeddingConfig.Dimensions
 	)
 
 	if model == "" {
@@ -337,12 +286,13 @@ func validateQueryParams(o *DefaultRAGOptions) error {
 	return errors.Join(errs...)
 }
 
-func validateSelectedModels(models []string, selected ...string) error {
+func validateSelectedModels(o *llmOptions, selected ...string) error {
 	errs := make([]error, 0, len(selected))
 
-	for _, s := range selected {
-		if !slices.Contains(models, s) {
-			errs = append(errs, fmt.Errorf("%w: %q", ErrInvalidSelectedModel, s))
+	for _, model := range selected {
+		_, err := o.providers.ProviderFor(model)
+		if err != nil {
+			errs = append(errs, errf("provider for %q: %w", model, err))
 		}
 	}
 
