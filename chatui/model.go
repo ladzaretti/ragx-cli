@@ -3,11 +3,13 @@ package chatui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"time"
 
 	"github.com/ladzaretti/ragrat/cli/types"
+	"github.com/ladzaretti/ragrat/llm"
 	"github.com/ladzaretti/ragrat/vecdb"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -61,6 +63,7 @@ type model struct {
 	reasoningShow bool
 	asciiShow     bool
 	selectedModel string
+	contextUsed   llm.ContextUsage
 	cancel        context.CancelFunc // cancel for the in-flight LLM request
 	lastErr       string             // shown in footer when non-empty
 
@@ -213,7 +216,7 @@ func New(providers types.Providers, vecdb *vecdb.VectorDB, config ModelConfig) *
 
 func (*model) Init() tea.Cmd { return textinput.Blink }
 
-func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:cyclop
+func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:cyclop,gocognit
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		return m.handleKey(msg)
@@ -270,6 +273,14 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:cyclop
 				if m.cancel != nil {
 					m.cancel()
 					m.cancel = nil
+				}
+
+				provider, err := m.providers.ProviderFor(m.selectedModel)
+				if err != nil {
+					m.lastErr = strings.ToUpper(msg.Err.Error())
+					m.contextUsed = llm.ContextUsage{}
+				} else {
+					m.contextUsed = provider.Session.ContextUsed()
 				}
 
 				m.writeHistory(m.responseBuilder.String())
@@ -354,6 +365,7 @@ func (m *model) View() string {
 		footerItems = append(footerItems,
 			truncate(selectedModelStatusStyle, m.selectedModel, 28),
 			truncate(embedSelectedModelStatusStyle, m.config.EmbeddingModel, 22),
+			contextStatusStyle.Render(fmt.Sprintf("Ctx %d/%d", m.contextUsed.Used, m.contextUsed.Max)),
 		)
 	}
 
@@ -448,8 +460,8 @@ func (m *model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// TODO1: extract history out off the llm client/chat
-// TODO2: tokenizer, and token control.
+// TODO: configurable context length & reserve (?)
+// TODO1: truncate based on context length
 // TODO3: persist db + watch functionality
 
 //nolint:unparam

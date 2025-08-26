@@ -59,6 +59,7 @@ var (
 	modelsStatusStyle             = lipgloss.NewStyle().Background(lipgloss.Color(mochaYellow)).Foreground(lipgloss.Color(mochaCrust)).Bold(true).Padding(0, 1)
 	defaultStatusStyle            = lipgloss.NewStyle().Background(lipgloss.Color(mochaSurface0)).Foreground(lipgloss.Color(mochaText)).Bold(true).Padding(0, 1)
 	errorStatusStyle              = lipgloss.NewStyle().Background(lipgloss.Color(mochaRed)).Foreground(lipgloss.Color(mochaCrust)).Bold(true).Padding(0, 1)
+	contextStatusStyle            = lipgloss.NewStyle().Background(lipgloss.Color(mochaGreen)).Foreground(lipgloss.Color(mochaCrust)).Bold(true).Padding(0, 1)
 	selectedModelStatusStyle      = lipgloss.NewStyle().Background(lipgloss.Color(mochaPeach)).Foreground(lipgloss.Color(mochaCrust)).Bold(true).Padding(0, 1)
 	embedSelectedModelStatusStyle = lipgloss.NewStyle().Background(lipgloss.Color(mochaTeal)).Foreground(lipgloss.Color(mochaCrust)).Bold(true).Padding(0, 1)
 

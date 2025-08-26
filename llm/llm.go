@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	openai "github.com/openai/openai-go/v2"
 	"github.com/openai/openai-go/v2/option"
@@ -236,14 +237,49 @@ func (c *Client) EmbedBatch(ctx context.Context, req EmbedBatchRequest) (*EmbedB
 	}, nil
 }
 
+// TokenCounter reports the number of tokens in a set of messages.
+type TokenCounter interface {
+	Count(msgs ...openai.ChatCompletionMessageParamUnion) int
+}
+
+func (ApproxTokenCounter) Count(msgs ...openai.ChatCompletionMessageParamUnion) int {
+	n := 0
+	for _, m := range msgs {
+		u := m.GetContent().AsAny()
+
+		switch v := u.(type) {
+		case *string:
+			n += utf8.RuneCountInString(*v)
+
+		case *[]openai.ChatCompletionContentPartUnionParam:
+			for _, p := range *v {
+				if text := p.GetText(); text != nil {
+					n += utf8.RuneCountInString(*text)
+				}
+			}
+		default:
+		}
+	}
+
+	return (n + 3) / 4 // applying the standard idiom for positive integer rounding up.
+}
+
+// ApproxTokenCounter estimates token usage by assuming roughly
+// one token corresponds to four runes.
+type ApproxTokenCounter struct{}
+
 // ChatSession represents a single conversational context.
 // Not thread safe, create a separate ChatSession per goroutine
 // or protect calls with a mutex.
 type ChatSession struct {
-	logger      *slog.Logger
-	client      *Client
-	history     []openai.ChatCompletionMessageParamUnion
-	temperature float64
+	logger        *slog.Logger
+	client        *Client
+	history       []openai.ChatCompletionMessageParamUnion
+	temperature   float64
+	contextLength int
+	contextUsed   int
+
+	tokenCounter TokenCounter
 }
 
 type SessionOpt func(*ChatSession)
@@ -262,11 +298,26 @@ func WithSessionTemperature(t float64) SessionOpt {
 	}
 }
 
+// WithTokenCounter sets a custom TokenCounter for estimating token usage.
+func WithTokenCounter(tc TokenCounter) SessionOpt {
+	return func(o *ChatSession) {
+		o.tokenCounter = tc
+	}
+}
+
+// WithContextLength sets the maximum context length (in tokens) for a session.
+func WithContextLength(l int) SessionOpt {
+	return func(o *ChatSession) {
+		o.contextLength = l
+	}
+}
+
 // NewChat creates a new chat session with optional system prompt.
 func NewChat(c *Client, systemPrompt string, opts ...SessionOpt) (*ChatSession, error) {
 	session := &ChatSession{
-		client: c,
-		logger: slog.Default(),
+		client:       c,
+		logger:       slog.Default(),
+		tokenCounter: ApproxTokenCounter{},
 	}
 
 	for _, o := range opts {
@@ -290,6 +341,13 @@ type ChatResponseIterator iter.Seq2[ChatResponse, error]
 type ChatResponse struct {
 	Content string // assistant text
 	Usage   any
+}
+
+type ContextUsage struct{ Used, Max int }
+
+// ContextUsed returns the number of tokens currently used in the session context.
+func (s *ChatSession) ContextUsed() ContextUsage {
+	return ContextUsage{Used: s.contextUsed, Max: s.contextLength}
 }
 
 // Send sends user messages and returns a response.
@@ -333,6 +391,7 @@ func (s *ChatSession) Send(ctx context.Context, model string, contents ...string
 
 	msg := completion.Choices[0].Message
 	s.history = append(s.history, msg.ToParam())
+	s.contextUsed = s.tokenCounter.Count(s.history...)
 
 	s.logger.Info("saved assistant message", "content_present", msg.Content != "")
 
@@ -409,6 +468,7 @@ func (s *ChatSession) SendStreaming(ctx context.Context, model string, contents 
 		if content != "" {
 			param := openai.ChatCompletionMessage{Content: content, Role: "assistant"}.ToParam()
 			s.history = append(s.history, param)
+			s.contextUsed = s.tokenCounter.Count(s.history...)
 		}
 	}, nil
 }
