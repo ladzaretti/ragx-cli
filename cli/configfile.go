@@ -95,11 +95,10 @@ type PromptConfig struct {
 }
 
 type EmbeddingConfig struct {
-	EmbeddingModel string `json:"embedding_model,omitempty" toml:"embedding_model"      comment:"Model used for embeddings"`
-	Dimensions     int    `json:"dimensions,omitempty"      toml:"dimensions,commented" comment:"Embedding vector dimension (must match model output)"`
-	ChunkSize      int    `json:"chunk_size,omitempty"      toml:"chunk_size,commented" comment:"Number of characters per chunk"`
-	Overlap        int    `json:"overlap,omitempty"         toml:"overlap,commented"    comment:"Number of characters overlapped between chunks (must be less than chunk_size)"`
-	TopK           int    `json:"top_k,omitempty"           toml:"top_k,commented"      comment:"Number of chunks to retrieve during RAG"`
+	Model     string `json:"embedding_model,omitempty" toml:"embedding_model"      comment:"Model used for embeddings"`
+	ChunkSize int    `json:"chunk_size,omitempty"      toml:"chunk_size,commented" comment:"Number of characters per chunk"`
+	Overlap   int    `json:"overlap,omitempty"         toml:"overlap,commented"    comment:"Number of characters overlapped between chunks (must be less than chunk_size)"`
+	TopK      int    `json:"top_k,omitempty"           toml:"top_k,commented"      comment:"Number of chunks to retrieve during RAG"`
 }
 
 type LoggingConfig struct {

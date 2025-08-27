@@ -141,6 +141,7 @@ func (o *DefaultRAGOptions) planFor(cmd *cobra.Command) {
 		o.addStep(func(_ context.Context, _ ...string) error { return o.llmOptions.initProviders(o.Logger) })
 		o.addStep(o.initLLMModels)
 		o.addStep(func(_ context.Context, _ ...string) error { return validateSelectedModels(o.llmOptions) })
+		o.addStep(o.initVecDim)
 		o.addStep(o.initVecdb)
 	case "list":
 		o.addStep(func(_ context.Context, _ ...string) error { return o.initLogger() })
@@ -188,8 +189,29 @@ func (o *DefaultRAGOptions) initLLMModels(ctx context.Context, _ ...string) erro
 	return nil
 }
 
+func (o *DefaultRAGOptions) initVecDim(ctx context.Context, _ ...string) error {
+	model := o.llmOptions.embeddingConfig.Model
+
+	if model == "" {
+		return ErrMissingEmbeddingModel
+	}
+
+	d, err := o.llmOptions.dimFor(ctx, model)
+	if err != nil {
+		return fmt.Errorf("init embedding dim: %w", err)
+	}
+
+	o.llmOptions.dim = d
+
+	return nil
+}
+
 func (o *DefaultRAGOptions) initVecdb(_ context.Context, _ ...string) error {
-	v, err := vecdb.New(o.llmOptions.embeddingConfig.Dimensions)
+	if o.llmOptions.dim == 0 {
+		return ErrMissingDimension
+	}
+
+	v, err := vecdb.New(o.llmOptions.dim)
 	if err != nil {
 		return errf("create vector database:%v", err)
 	}
@@ -230,7 +252,6 @@ Embed data, run retrieval, and query local or remote OpenAI API-compatible LLMs.
 	cmd.PersistentFlags().StringVarP(&o.configOptions.flags.logFilename, "log-file", "f", "", "set log filename")
 	cmd.PersistentFlags().StringVarP(&o.configOptions.flags.logLevel, "log-level", "l", "", "set log level (debug, info, warn, error)")
 	cmd.PersistentFlags().StringSliceVarP(&o.matchPatterns, "match", "M", nil, "regex pattern(s) to match files (e.g. '^.*\\.md$', '(?i)\\.txt$')")
-	cmd.PersistentFlags().IntVar(&o.configOptions.flags.dimensions, "dim", 0, "embedding vector dimension (must match embedding model output)")
 
 	hiddenFlags := []string{
 		"base-url",
@@ -258,8 +279,7 @@ Embed data, run retrieval, and query local or remote OpenAI API-compatible LLMs.
 func validateQueryParams(o *DefaultRAGOptions) error {
 	var (
 		model          = o.configOptions.resolved.LLMConfig.DefaultModel
-		embeddingModel = o.configOptions.resolved.EmbeddingConfig.EmbeddingModel
-		dim            = o.configOptions.resolved.EmbeddingConfig.Dimensions
+		embeddingModel = o.configOptions.resolved.EmbeddingConfig.Model
 	)
 
 	if model == "" {
@@ -268,10 +288,6 @@ func validateQueryParams(o *DefaultRAGOptions) error {
 
 	if embeddingModel == "" {
 		return ErrMissingEmbeddingModel
-	}
-
-	if dim == 0 {
-		return ErrMissingDimension
 	}
 
 	errs := make([]error, 0, len(o.matchPatterns))

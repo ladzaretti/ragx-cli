@@ -58,7 +58,7 @@ func (o *ChatOptions) Run(ctx context.Context, args ...string) error {
 		config = chatui.ModelConfig{
 			ChatModel:      o.llmConfig.DefaultModel,
 			UserPromptTmpl: o.promptConfig.UserPromptTmpl,
-			EmbeddingModel: o.embeddingConfig.EmbeddingModel,
+			EmbeddingModel: o.embeddingConfig.Model,
 			TopK:           o.embeddingConfig.TopK,
 		}
 		tui = chatui.New(o.providers, o.vectordb, config)

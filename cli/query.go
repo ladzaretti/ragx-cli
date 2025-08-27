@@ -72,7 +72,7 @@ func (o *QueryOptions) Run(ctx context.Context, args ...string) error {
 
 	var (
 		selectedModel  = o.llmOptions.llmConfig.DefaultModel
-		embeddingModel = o.llmOptions.embeddingConfig.EmbeddingModel
+		embeddingModel = o.llmOptions.embeddingConfig.Model
 		topK           = o.llmOptions.embeddingConfig.TopK
 	)
 

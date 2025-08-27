@@ -53,7 +53,6 @@ type Flags struct {
 	configPath     string
 	model          string
 	embeddingModel string
-	dimensions     int
 	logDir         string
 	logFilename    string
 	logLevel       string
@@ -110,8 +109,7 @@ func (o *configOptions) resolve() error {
 	o.resolved.PromptConfig.System = cmp.Or(o.fileConfig.PromptConfig.System, prompt.DefaultSystemPrompt)
 	o.resolved.PromptConfig.UserPromptTmpl = cmp.Or(o.fileConfig.PromptConfig.UserPromptTmpl, prompt.DefaultUserPromptTmpl)
 
-	o.resolved.EmbeddingConfig.EmbeddingModel = cmp.Or(o.flags.embeddingModel, o.fileConfig.EmbeddingConfig.EmbeddingModel)
-	o.resolved.EmbeddingConfig.Dimensions = cmp.Or(o.flags.dimensions, o.fileConfig.EmbeddingConfig.Dimensions)
+	o.resolved.EmbeddingConfig.Model = cmp.Or(o.flags.embeddingModel, o.fileConfig.EmbeddingConfig.Model)
 
 	o.resolved.LoggingConfig.Dir = cmp.Or(o.flags.logDir, o.fileConfig.LoggingConfig.Dir)
 	o.resolved.LoggingConfig.Filename = cmp.Or(o.flags.logFilename, o.fileConfig.LoggingConfig.Filename)

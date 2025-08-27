@@ -460,10 +460,6 @@ func (m *model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// TODO: configurable context length & reserve (?)
-// TODO1: truncate based on context length
-// TODO3: persist db + watch functionality
-
 //nolint:unparam
 var leaderMap = map[string]func(*model) (tea.Model, tea.Cmd){
 	"q": func(m *model) (tea.Model, tea.Cmd) { return m, tea.Quit },

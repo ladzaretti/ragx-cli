@@ -24,6 +24,7 @@ type llmOptions struct {
 
 	providers    types.Providers
 	vectordb     *vecdb.VectorDB
+	dim          int
 	embeddingREs []*regexp.Regexp
 }
 
@@ -56,6 +57,25 @@ func (o *llmOptions) initProviders(logger *slog.Logger) error {
 	}
 
 	return nil
+}
+
+func (o *llmOptions) dimFor(ctx context.Context, embeddingModel string) (int, error) {
+	provider, err := o.providers.ProviderFor(embeddingModel)
+	if err != nil {
+		return 0, fmt.Errorf("provider for: %w", err)
+	}
+
+	req := llm.EmbedRequest{
+		Input: "",
+		Model: embeddingModel,
+	}
+
+	res, err := provider.Client.Embed(ctx, req)
+	if err != nil {
+		return 0, fmt.Errorf("dim: %w", err)
+	}
+
+	return len(res.Vector), nil
 }
 
 func (o *llmOptions) embed(ctx context.Context, logger *slog.Logger, r io.Reader, matchREs []*regexp.Regexp, args ...string) error {
@@ -152,7 +172,7 @@ func (o *llmOptions) embedAll(ctx context.Context, logger *slog.Logger, sendStat
 
 func (o *llmOptions) embedData(ctx context.Context, logger *slog.Logger, cf *dataChunks) error {
 	n := len(cf.chunks)
-	embeddingModel := o.embeddingConfig.EmbeddingModel
+	embeddingModel := o.embeddingConfig.Model
 
 	provider, err := o.providers.ProviderFor(embeddingModel)
 	if err != nil {
@@ -164,7 +184,7 @@ func (o *llmOptions) embedData(ctx context.Context, logger *slog.Logger, cf *dat
 
 		req := llm.EmbedBatchRequest{
 			Input: cf.chunks[i:end],
-			Model: o.embeddingConfig.EmbeddingModel,
+			Model: o.embeddingConfig.Model,
 		}
 
 		res, err := provider.Client.EmbedBatch(ctx, req)
