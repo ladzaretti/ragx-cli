@@ -25,17 +25,23 @@ func (e *ConfigError) Error() string {
 func (e *ConfigError) Unwrap() error { return e.Err }
 
 type Config struct {
-	LLMConfig       LLMConfig        `json:"llm"                 toml:"llm"`
-	PromptConfig    *PromptConfig    `json:"prompt,omitempty"    toml:"prompt,omitempty"`
-	EmbeddingConfig *EmbeddingConfig `json:"embedding,omitempty" toml:"embedding,omitempty"`
-	LoggingConfig   *LoggingConfig   `json:"logging,omitempty"   toml:"logging,commented"`
+	LLM       LLMConfig        `json:"llm"                 toml:"llm"`
+	Prompt    *PromptConfig    `json:"prompt,omitempty"    toml:"prompt,omitempty"`
+	Embedding *EmbeddingConfig `json:"embedding,omitempty" toml:"embedding,omitempty"`
+	Logging   *LoggingConfig   `json:"logging,omitempty"   toml:"logging,commented"`
 
 	path string // path to the loaded config file. Empty if no config file was used.
 }
 
 type LLMConfig struct {
-	Providers    []ProviderConfig `json:"providers,omitempty" toml:"providers,commented" comment:"llm providers"`
-	DefaultModel string           `json:"model,omitempty"     toml:"model,commented"     comment:"Default model to use"`
+	DefaultModel string           `json:"default_model,omitempty" toml:"default_model"       comment:"Default model to use"`
+	Providers    []ProviderConfig `json:"providers,omitempty"     toml:"providers,commented" comment:"LLM providers (uncomment and duplicate as needed)\n[[llm.providers]]\nbase_url = 'http://localhost:11434'\napi_key = '<KEY>'\t\t# optional\ntemperature = 0.7\t\t# optional"`
+	Models       []ModelConfig    `json:"models,omitempty"        toml:"models,commented"    comment:"Optional model definitions for context length control (uncomment and duplicate as needed)\n[[llm.models]]\nid = 'qwen:8b-fast'\t\t# Model identifier\ncontext = 8192\t\t# Maximum context length in tokens"`
+}
+
+type ModelConfig struct {
+	ID      string `json:"id,omitempty"      toml:"id,commented"      comment:"Model identifier"`
+	Context int    `json:"context,omitempty" toml:"context,commented" comment:"Maximum context length in tokens"`
 }
 
 type ProviderConfig struct {
@@ -109,10 +115,10 @@ type LoggingConfig struct {
 
 func newFileConfig() *Config {
 	return &Config{
-		LLMConfig:       LLMConfig{},
-		PromptConfig:    &PromptConfig{},
-		EmbeddingConfig: &EmbeddingConfig{},
-		LoggingConfig:   &LoggingConfig{},
+		LLM:       LLMConfig{},
+		Prompt:    &PromptConfig{},
+		Embedding: &EmbeddingConfig{},
+		Logging:   &LoggingConfig{},
 	}
 }
 
@@ -131,13 +137,13 @@ func (c *Config) setDefaults() error {
 		return &ConfigError{Opt: "logging.log_dir", Err: err}
 	}
 
-	c.LoggingConfig.Dir = cmp.Or(c.LoggingConfig.Dir, dir)
-	c.LoggingConfig.Filename = cmp.Or(c.LoggingConfig.Filename, defaultLogFilename)
-	c.LoggingConfig.Level = cmp.Or(c.LoggingConfig.Level, defaultLogLevel)
+	c.Logging.Dir = cmp.Or(c.Logging.Dir, dir)
+	c.Logging.Filename = cmp.Or(c.Logging.Filename, defaultLogFilename)
+	c.Logging.Level = cmp.Or(c.Logging.Level, defaultLogLevel)
 
-	c.EmbeddingConfig.ChunkSize = cmp.Or(c.EmbeddingConfig.ChunkSize, defaultChunkSize)
-	c.EmbeddingConfig.Overlap = cmp.Or(c.EmbeddingConfig.Overlap, int(defaultOverlap))
-	c.EmbeddingConfig.TopK = cmp.Or(c.EmbeddingConfig.TopK, defaultTopK)
+	c.Embedding.ChunkSize = cmp.Or(c.Embedding.ChunkSize, defaultChunkSize)
+	c.Embedding.Overlap = cmp.Or(c.Embedding.Overlap, int(defaultOverlap))
+	c.Embedding.TopK = cmp.Or(c.Embedding.TopK, defaultTopK)
 
 	return nil
 }
@@ -147,16 +153,16 @@ func (c *Config) validate() error {
 		return &ConfigError{Err: errors.New("cannot validate a nil config")}
 	}
 
-	if strings.Contains(c.LoggingConfig.Filename, "/") {
+	if strings.Contains(c.Logging.Filename, "/") {
 		return &ConfigError{Opt: "logging.log_filename", Err: errors.New("must not contain slashes")}
 	}
 
-	if c.EmbeddingConfig != nil {
-		if c.EmbeddingConfig.ChunkSize < 0 {
+	if c.Embedding != nil {
+		if c.Embedding.ChunkSize < 0 {
 			return &ConfigError{Opt: "retrieval.chunk_size", Err: errors.New("must be zero or positive")}
 		}
 
-		if c.EmbeddingConfig.TopK < 0 {
+		if c.Embedding.TopK < 0 {
 			return &ConfigError{Opt: "retrieval.top_k", Err: errors.New("must be zero or positive")}
 		}
 	}
@@ -165,9 +171,9 @@ func (c *Config) validate() error {
 }
 
 func (c *Config) validateProviders() error {
-	errs := make([]error, 0, len(c.LLMConfig.Providers))
+	errs := make([]error, 0, len(c.LLM.Providers))
 
-	for i, p := range c.LLMConfig.Providers {
+	for i, p := range c.LLM.Providers {
 		if err := p.validate(); err != nil {
 			errs = append(errs, fmt.Errorf("providers[%d]: %w", i, err))
 		}

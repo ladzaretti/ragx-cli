@@ -91,8 +91,8 @@ func (o *configOptions) Complete() error {
 		return err
 	}
 
-	if len(o.resolved.LLMConfig.Providers) == 0 {
-		o.resolved.LLMConfig.Providers = append(o.resolved.LLMConfig.Providers, defaultProvider)
+	if len(o.resolved.LLM.Providers) == 0 {
+		o.resolved.LLM.Providers = append(o.resolved.LLM.Providers, defaultProvider)
 	}
 
 	return o.resolve()
@@ -103,23 +103,23 @@ func (o *configOptions) resolve() error {
 
 	o.resolved.path = cmp.Or(o.flags.configPath, o.fileConfig.path)
 
-	o.resolved.LLMConfig.DefaultModel = cmp.Or(o.flags.model, o.fileConfig.LLMConfig.DefaultModel)
-	o.resolved.LLMConfig.Providers = append(o.resolved.LLMConfig.Providers, o.envConfig.providers...)
+	o.resolved.LLM.DefaultModel = cmp.Or(o.flags.model, o.fileConfig.LLM.DefaultModel)
+	o.resolved.LLM.Providers = append(o.resolved.LLM.Providers, o.envConfig.providers...)
 
-	o.resolved.PromptConfig.System = cmp.Or(o.fileConfig.PromptConfig.System, prompt.DefaultSystemPrompt)
-	o.resolved.PromptConfig.UserPromptTmpl = cmp.Or(o.fileConfig.PromptConfig.UserPromptTmpl, prompt.DefaultUserPromptTmpl)
+	o.resolved.Prompt.System = cmp.Or(o.fileConfig.Prompt.System, prompt.DefaultSystemPrompt)
+	o.resolved.Prompt.UserPromptTmpl = cmp.Or(o.fileConfig.Prompt.UserPromptTmpl, prompt.DefaultUserPromptTmpl)
 
-	o.resolved.EmbeddingConfig.Model = cmp.Or(o.flags.embeddingModel, o.fileConfig.EmbeddingConfig.Model)
+	o.resolved.Embedding.Model = cmp.Or(o.flags.embeddingModel, o.fileConfig.Embedding.Model)
 
-	o.resolved.LoggingConfig.Dir = cmp.Or(o.flags.logDir, o.fileConfig.LoggingConfig.Dir)
-	o.resolved.LoggingConfig.Filename = cmp.Or(o.flags.logFilename, o.fileConfig.LoggingConfig.Filename)
-	o.resolved.LoggingConfig.Level = cmp.Or(os.Getenv("LOG_LEVEL"), o.flags.logLevel, o.fileConfig.LoggingConfig.Level)
+	o.resolved.Logging.Dir = cmp.Or(o.flags.logDir, o.fileConfig.Logging.Dir)
+	o.resolved.Logging.Filename = cmp.Or(o.flags.logFilename, o.fileConfig.Logging.Filename)
+	o.resolved.Logging.Level = cmp.Or(os.Getenv("LOG_LEVEL"), o.flags.logLevel, o.fileConfig.Logging.Level)
 
 	return nil
 }
 
 func (o *configOptions) Validate() (retErr error) {
-	if _, err := genericclioptions.ParseLevel(o.resolved.LoggingConfig.Level); err != nil {
+	if _, err := genericclioptions.ParseLevel(o.resolved.Logging.Level); err != nil {
 		return err
 	}
 
@@ -222,7 +222,10 @@ func (*generateConfigOptions) Complete() error { return nil }
 func (*generateConfigOptions) Validate() error { return nil }
 
 func (o *generateConfigOptions) Run(context.Context, ...string) error {
-	o.Printf("%s", GenerateDefault())
+	s := GenerateDefault()
+	out := genericclioptions.RemoveLinesContaining(s, "# providers = []", "# models = []")
+
+	o.Printf("%s", out)
 
 	return nil
 }

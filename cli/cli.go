@@ -105,9 +105,9 @@ func (o *DefaultRAGOptions) complete() error { //nolint:revive
 		return err
 	}
 
-	o.llmOptions.llmConfig = o.configOptions.resolved.LLMConfig
-	o.llmOptions.promptConfig = *o.configOptions.resolved.PromptConfig
-	o.llmOptions.embeddingConfig = *o.configOptions.resolved.EmbeddingConfig
+	o.llmOptions.llmConfig = o.configOptions.resolved.LLM
+	o.llmOptions.promptConfig = *o.configOptions.resolved.Prompt
+	o.llmOptions.embeddingConfig = *o.configOptions.resolved.Embedding
 	o.llmOptions.embeddingREs = matchREs
 
 	return nil
@@ -156,8 +156,8 @@ func (o *DefaultRAGOptions) addStep(s step) {
 }
 
 func (o *DefaultRAGOptions) initLogger() error {
-	dir := o.configOptions.resolved.LoggingConfig.Dir
-	name := o.configOptions.resolved.LoggingConfig.Filename
+	dir := o.configOptions.resolved.Logging.Dir
+	name := o.configOptions.resolved.Logging.Filename
 
 	f, err := openLogFile(dir, name)
 	if err != nil {
@@ -166,7 +166,7 @@ func (o *DefaultRAGOptions) initLogger() error {
 
 	o.cleanupFuncs = append(o.cleanupFuncs, func() error { return f.Close() })
 
-	level, _ := genericclioptions.ParseLevel(o.configOptions.resolved.LoggingConfig.Level)
+	level, _ := genericclioptions.ParseLevel(o.configOptions.resolved.Logging.Level)
 	o.SetLevel(level)
 
 	logger := slog.New(slog.NewTextHandler(f, &slog.HandlerOptions{Level: level}))
@@ -278,8 +278,8 @@ Embed data, run retrieval, and query local or remote OpenAI API-compatible LLMs.
 
 func validateQueryParams(o *DefaultRAGOptions) error {
 	var (
-		model          = o.configOptions.resolved.LLMConfig.DefaultModel
-		embeddingModel = o.configOptions.resolved.EmbeddingConfig.Model
+		model          = o.configOptions.resolved.LLM.DefaultModel
+		embeddingModel = o.configOptions.resolved.Embedding.Model
 	)
 
 	if model == "" {

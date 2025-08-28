@@ -54,7 +54,8 @@ func RejectDisallowedFlags(cmd *cobra.Command, disallowed ...string) error {
 	return nil
 }
 
-func StringContains(str string, substrings ...string) bool {
+// ContainsAny reports whether str contains any of substrings.
+func ContainsAny(str string, substrings ...string) bool {
 	for _, substr := range substrings {
 		if strings.Contains(str, substr) {
 			return true
@@ -62,4 +63,20 @@ func StringContains(str string, substrings ...string) bool {
 	}
 
 	return false
+}
+
+// RemoveLinesContaining removes any lines that contain any of substrings.
+func RemoveLinesContaining(s string, substrings ...string) string {
+	lines := strings.Split(s, "\n")
+	out := lines[:0]
+
+	for _, l := range lines {
+		if ContainsAny(l, substrings...) {
+			continue
+		}
+
+		out = append(out, l)
+	}
+
+	return strings.Join(out, "\n")
 }
