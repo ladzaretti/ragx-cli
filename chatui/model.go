@@ -227,6 +227,14 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:cyclop,gocog
 		m.width, m.height = msg.Width, msg.Height
 		return m.resize(msg)
 
+	case tea.BlurMsg:
+		m.textarea.Blur()
+
+	case tea.FocusMsg:
+		if m.currentFocus == focusTextarea {
+			m.focus(focusTextarea)
+		}
+
 	case spinner.TickMsg:
 		var plainCmd, thinkingCmd tea.Cmd
 

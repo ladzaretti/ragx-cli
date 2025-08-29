@@ -63,7 +63,10 @@ func (o *ChatOptions) Run(ctx context.Context, args ...string) error {
 			RetrievalTopK:  o.embeddingConfig.TopK,
 		}
 		tui = chatui.New(o.providers, o.vectordb, config)
-		p   = tea.NewProgram(tui, tea.WithAltScreen())
+		p   = tea.NewProgram(tui,
+			tea.WithAltScreen(),
+			tea.WithReportFocus(),
+		)
 	)
 
 	if _, err := p.Run(); err != nil {
