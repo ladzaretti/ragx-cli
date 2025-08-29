@@ -226,12 +226,7 @@ func createClient(logger *slog.Logger, c ProviderConfig) (*llm.Client, error) {
 	opts := []llm.Option{
 		llm.WithBaseURL(c.BaseURL),
 		llm.WithLogger(logger),
-	}
-
-	temperature := c.Temperature
-
-	if temperature != 0.0 {
-		opts = append(opts, llm.WithTemperature(temperature))
+		llm.WithTemperature(c.Temperature),
 	}
 
 	client, err := llm.NewClient(opts...)
@@ -242,13 +237,10 @@ func createClient(logger *slog.Logger, c ProviderConfig) (*llm.Client, error) {
 	return client, nil
 }
 
-func createSession(logger *slog.Logger, client *llm.Client, temperature float64, systemPrompt string) (*llm.ChatSession, error) {
+func createSession(logger *slog.Logger, client *llm.Client, temperature *float64, systemPrompt string) (*llm.ChatSession, error) {
 	sessionOpts := []llm.SessionOpt{
 		llm.WithSessionLogger(logger),
-	}
-
-	if temperature != 0.0 {
-		sessionOpts = append(sessionOpts, llm.WithSessionTemperature(temperature))
+		llm.WithSessionTemperature(temperature),
 	}
 
 	session, err := llm.NewChat(client, systemPrompt, sessionOpts...)

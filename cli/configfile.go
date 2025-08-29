@@ -35,19 +35,28 @@ type Config struct {
 
 type LLMConfig struct {
 	DefaultModel string           `json:"default_model,omitempty" toml:"default_model"       comment:"Default model to use"`
-	Providers    []ProviderConfig `json:"providers,omitempty"     toml:"providers,commented" comment:"LLM providers (uncomment and duplicate as needed)\n[[llm.providers]]\nbase_url = 'http://localhost:11434'\napi_key = '<KEY>'\t\t# optional\ntemperature = 0.7\t\t# optional"`
-	Models       []ModelConfig    `json:"models,omitempty"        toml:"models,commented"    comment:"Optional model definitions for context length control (uncomment and duplicate as needed)\n[[llm.models]]\nid = 'qwen:8b-fast'\t\t# Model identifier\ncontext = 8192\t\t# Maximum context length in tokens"`
+	Providers    []ProviderConfig `json:"providers,omitempty"     toml:"providers,commented" comment:"LLM providers (uncomment and duplicate as needed)\n[[llm.providers]]\nbase_url = 'http://localhost:11434'\napi_key = '<KEY>'\t\t# optional\ntemperature = 0.7\t\t# optional (provider default)"`
+	Models       []ModelConfig    `json:"models,omitempty"        toml:"models,commented"    comment:"Optional model definitions for context length control (uncomment and duplicate as needed)\n[[llm.models]]\nid = 'qwen:8b-fast'\t\t# Model identifier\ncontext = 4096\t\t# Maximum context length in tokens\ntemperature = 0.7\t\t# optional (model override)"`
 }
 
 type ModelConfig struct {
-	ID      string `json:"id,omitempty"      toml:"id,commented"      comment:"Model identifier"`
-	Context int    `json:"context,omitempty" toml:"context,commented" comment:"Maximum context length in tokens"`
+	ID          string   `json:"id,omitempty"          toml:"id,commented"          comment:"Model identifier"`
+	Context     int      `json:"context,omitempty"     toml:"context,commented"     comment:"Maximum context length in tokens"`
+	Temperature *float64 `json:"temperature,omitempty" toml:"temperature,commented" comment:"Optional model-level temperature override"`
+}
+
+func (m ModelConfig) validate() error {
+	if m.ID == "" {
+		return &ConfigError{Opt: "ID", Err: errors.New("model ID cannot be empty")}
+	}
+
+	return validateTemperature(m.Temperature)
 }
 
 type ProviderConfig struct {
-	BaseURL     string  `json:"base_url"              toml:"base_url"              comment:"Base URL for the LLM server (e.g., Ollama, OpenAI API-compatible)"`
-	APIKey      string  `json:"api_key,omitempty"     toml:"api_key,commented"     comment:"Optional API key if required"`
-	Temperature float64 `json:"temperature,omitempty" toml:"temperature,commented" comment:"Completion temperature"`
+	BaseURL     string   `json:"base_url"              toml:"base_url"              comment:"Base URL for the LLM server (e.g., Ollama, OpenAI API-compatible)"`
+	APIKey      string   `json:"api_key,omitempty"     toml:"api_key,commented"     comment:"Optional API key if required"`
+	Temperature *float64 `json:"temperature,omitempty" toml:"temperature,commented" comment:"Default temperature for this provider (optional)"`
 }
 
 func (p ProviderConfig) validate() error {
@@ -85,12 +94,7 @@ func (p ProviderConfig) validate() error {
 		}
 	}
 
-	if p.Temperature < 0 || p.Temperature > 2 {
-		errs = append(errs, &ConfigError{
-			Opt: "temperature",
-			Err: errors.New("must be between 0 and 2"),
-		})
-	}
+	errs = append(errs, validateTemperature(p.Temperature))
 
 	return errors.Join(errs...)
 }
@@ -167,7 +171,10 @@ func (c *Config) validate() error {
 		}
 	}
 
-	return c.validateProviders()
+	return errors.Join(
+		c.validateProviders(),
+		c.validateModels(),
+	)
 }
 
 func (c *Config) validateProviders() error {
@@ -176,6 +183,18 @@ func (c *Config) validateProviders() error {
 	for i, p := range c.LLM.Providers {
 		if err := p.validate(); err != nil {
 			errs = append(errs, fmt.Errorf("providers[%d]: %w", i, err))
+		}
+	}
+
+	return errors.Join(errs...)
+}
+
+func (c *Config) validateModels() error {
+	errs := make([]error, 0, len(c.LLM.Providers))
+
+	for i, p := range c.LLM.Models {
+		if err := p.validate(); err != nil {
+			errs = append(errs, fmt.Errorf("models[%d]: %w", i, err))
 		}
 	}
 
@@ -281,4 +300,19 @@ func parseFileConfig(path string) (*Config, error) {
 	}
 
 	return config, nil
+}
+
+func validateTemperature(t *float64) error {
+	if t == nil {
+		return nil
+	}
+
+	if *t < 0 || *t > 2 {
+		return &ConfigError{
+			Opt: "temperature",
+			Err: errors.New("must be between 0 and 2"),
+		}
+	}
+
+	return nil
 }

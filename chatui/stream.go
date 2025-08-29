@@ -34,7 +34,7 @@ func (m *model) startRAGCmd(ctx context.Context, query string) tea.Cmd {
 	var (
 		vdb      = m.vecdb
 		llmModel = m.selectedModel
-		config   = m.config
+		config   = m.llmConfig
 	)
 
 	provider, err := m.providers.ProviderFor(m.selectedModel)
@@ -48,7 +48,7 @@ func (m *model) startRAGCmd(ctx context.Context, query string) tea.Cmd {
 			return ragErr{err}
 		}
 
-		hits, err := vdb.SearchKNN(toFloat32Slice(q.Vector), config.TopK)
+		hits, err := vdb.SearchKNN(toFloat32Slice(q.Vector), config.RetrievalTopK)
 		if err != nil {
 			return ragErr{err}
 		}
@@ -62,7 +62,8 @@ func (m *model) startRAGCmd(ctx context.Context, query string) tea.Cmd {
 			return ragErr{err}
 		}
 
-		ch := prompt.SendStream(ctx, provider.Session, llmModel, p)
+		// FIXME: nil temp
+		ch := prompt.SendStream(ctx, provider.Session, llmModel, nil, p)
 
 		return ragReady{ch: ch}
 	}

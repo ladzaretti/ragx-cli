@@ -55,11 +55,11 @@ func (o *ChatOptions) Run(ctx context.Context, args ...string) error {
 	}
 
 	var (
-		config = chatui.ModelConfig{
-			ChatModel:      o.llmConfig.DefaultModel,
+		config = chatui.LLMConfig{
+			DefaultModel:   o.llmConfig.DefaultModel,
 			UserPromptTmpl: o.promptConfig.UserPromptTmpl,
 			EmbeddingModel: o.embeddingConfig.Model,
-			TopK:           o.embeddingConfig.TopK,
+			RetrievalTopK:  o.embeddingConfig.TopK,
 		}
 		tui = chatui.New(o.providers, o.vectordb, config)
 		p   = tea.NewProgram(tui, tea.WithAltScreen())

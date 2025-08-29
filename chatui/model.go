@@ -44,7 +44,7 @@ type model struct {
 
 	providers types.Providers
 	vecdb     *vecdb.VectorDB
-	config    ModelConfig
+	llmConfig LLMConfig
 
 	historyBuilder   strings.Builder
 	responseBuilder  strings.Builder
@@ -126,15 +126,16 @@ func (m *model) focus(f focus) {
 	m.textarea.Blur()
 }
 
-type ModelConfig struct {
-	TopK           int
-	ChatModel      string
-	EmbeddingModel string
-	UserPromptTmpl string
+// LLMConfig contains high-level LLM settings for the RAG pipeline.
+type LLMConfig struct {
+	DefaultModel   string // DefaultModel is the model used for chat/generation when none is specified.
+	UserPromptTmpl string // UserPromptTmpl is a go template used to build the user query + context.
+	EmbeddingModel string // EmbeddingModel is the model used to produce embeddings.
+	RetrievalTopK  int    // RetrievalTopK is the number of results to fetch from the vector DB for RAG. Use 0 to disable retrieval.
 }
 
 // New creates a new [model].
-func New(providers types.Providers, vecdb *vecdb.VectorDB, config ModelConfig) *model {
+func New(providers types.Providers, vecdb *vecdb.VectorDB, llmConfig LLMConfig) *model {
 	ta := textarea.New()
 	ta.Placeholder = "Ask anything\n(Press Ctrl+S to submit)"
 	ta.Focus()
@@ -166,7 +167,7 @@ func New(providers types.Providers, vecdb *vecdb.VectorDB, config ModelConfig) *
 	items := make([]list.Item, 0, 32)
 	longest := 0
 
-	selectedIndex, selectedModel := 0, config.ChatModel
+	selectedIndex, selectedModel := 0, llmConfig.DefaultModel
 	for i, p := range providers {
 		for j, m := range p.AvailableModels {
 			if l := lipgloss.Width(m); l > longest {
@@ -199,7 +200,7 @@ func New(providers types.Providers, vecdb *vecdb.VectorDB, config ModelConfig) *
 	return &model{
 		providers:       providers,
 		vecdb:           vecdb,
-		config:          config,
+		llmConfig:       llmConfig,
 		selectedModel:   selectedModel,
 		viewport:        viewport.New(0, 0),
 		modelList:       lm,
@@ -364,7 +365,7 @@ func (m *model) View() string {
 	} else {
 		footerItems = append(footerItems,
 			truncate(selectedModelStatusStyle, m.selectedModel, 28),
-			truncate(embedSelectedModelStatusStyle, m.config.EmbeddingModel, 22),
+			truncate(embedSelectedModelStatusStyle, m.llmConfig.EmbeddingModel, 22),
 			contextStatusStyle.Render(fmt.Sprintf("Ctx %d/%d", m.contextUsed.Used, m.contextUsed.Max)),
 		)
 	}

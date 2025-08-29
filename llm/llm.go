@@ -35,7 +35,7 @@ type config struct {
 	baseURL     string
 	apiKey      string
 	model       string
-	temperature float64
+	temperature *float64
 }
 
 // Option configures the OpenAI client.
@@ -70,7 +70,7 @@ func WithLogger(logger *slog.Logger) Option {
 }
 
 // WithTemperature sets the LLM completion temperature.
-func WithTemperature(t float64) Option {
+func WithTemperature(t *float64) Option {
 	return func(o *config) {
 		o.temperature = t
 	}
@@ -116,15 +116,14 @@ func (c *Client) GenerateCompletion(ctx context.Context, req CompletionRequest) 
 	c.logger.Debug("prompt", "text", req.Prompt)
 
 	params := openai.ChatCompletionNewParams{
-		Model:       model,
-		Temperature: openai.Float(c.temperature),
+		Model: model,
 		Messages: []openai.ChatCompletionMessageParamUnion{
 			openai.UserMessage(req.Prompt),
 		},
 	}
 
-	if c.temperature != 0.0 {
-		params.Temperature = openai.Float(c.temperature)
+	if c.temperature != nil {
+		params.Temperature = openai.Float(*c.temperature)
 	}
 
 	completion, err := c.openaiClient.Chat.Completions.New(ctx, params)
@@ -275,7 +274,7 @@ type ChatSession struct {
 	logger        *slog.Logger
 	client        *Client
 	history       []openai.ChatCompletionMessageParamUnion
-	temperature   float64
+	temperature   *float64
 	contextLength int
 	contextUsed   int
 
@@ -292,7 +291,7 @@ func WithSessionLogger(logger *slog.Logger) SessionOpt {
 }
 
 // WithSessionTemperature sets the session LLM completion temperature.
-func WithSessionTemperature(t float64) SessionOpt {
+func WithSessionTemperature(t *float64) SessionOpt {
 	return func(o *ChatSession) {
 		o.temperature = t
 	}
@@ -350,9 +349,10 @@ func (s *ChatSession) ContextUsed() ContextUsage {
 	return ContextUsage{Used: s.contextUsed, Max: s.contextLength}
 }
 
+// TODO: req struct
 // Send sends user messages and returns a response.
 // The assistant's reply is appended to the internal history.
-func (s *ChatSession) Send(ctx context.Context, model string, contents ...string) (*ChatResponse, error) {
+func (s *ChatSession) Send(ctx context.Context, model string, temperature *float64, contents ...string) (*ChatResponse, error) {
 	if model == "" {
 		return nil, ErrNoModelSelected
 	}
@@ -366,8 +366,9 @@ func (s *ChatSession) Send(ctx context.Context, model string, contents ...string
 		Messages: s.history,
 	}
 
-	if s.temperature != 0.0 {
-		params.Temperature = openai.Float(s.temperature)
+	t := cmp.Or(temperature, s.temperature, s.client.temperature)
+	if t != nil {
+		params.Temperature = openai.Float(*t)
 	}
 
 	s.logger.Debug("chat request", "model", model, "message_count", len(params.Messages))
@@ -401,9 +402,10 @@ func (s *ChatSession) Send(ctx context.Context, model string, contents ...string
 	}, nil
 }
 
+// TODO: req struct
 // SendStreaming sends user messages and returns a streaming response iterator.
 // The assistant's full reply is added to history after streaming completes.
-func (s *ChatSession) SendStreaming(ctx context.Context, model string, contents ...string) (ChatResponseIterator, error) {
+func (s *ChatSession) SendStreaming(ctx context.Context, model string, temperature *float64, contents ...string) (ChatResponseIterator, error) {
 	if model == "" {
 		return nil, ErrNoModelSelected
 	}
@@ -417,8 +419,9 @@ func (s *ChatSession) SendStreaming(ctx context.Context, model string, contents 
 		Messages: s.history,
 	}
 
-	if s.temperature != 0.0 {
-		params.Temperature = openai.Float(s.temperature)
+	t := cmp.Or(temperature, s.temperature, s.client.temperature)
+	if t != nil {
+		params.Temperature = openai.Float(*t)
 	}
 
 	stream := s.client.openaiClient.Chat.Completions.NewStreaming(ctx, params)

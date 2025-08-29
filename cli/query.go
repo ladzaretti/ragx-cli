@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"slices"
 	"strings"
 	"syscall"
 
@@ -118,7 +119,17 @@ func (o *QueryOptions) Run(ctx context.Context, args ...string) error {
 		return nil
 	}
 
-	ch := prompt.SendStream(ctx, provider.Session, selectedModel, p)
+	var temperature *float64
+
+	i := slices.IndexFunc(
+		o.llmOptions.llmConfig.Models,
+		func(m ModelConfig) bool { return m.ID == selectedModel },
+	)
+	if i != -1 {
+		temperature = o.llmOptions.llmConfig.Models[i].Temperature
+	}
+
+	ch := prompt.SendStream(ctx, provider.Session, selectedModel, temperature, p)
 
 	if err := drainStream(ctx, ch, o.Print, setStatus, spinner.stop); err != nil {
 		return fmt.Errorf("response stream: %w", err)
