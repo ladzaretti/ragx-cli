@@ -16,6 +16,7 @@ import (
 	"github.com/ladzaretti/ragrat/clierror"
 	"github.com/ladzaretti/ragrat/genericclioptions"
 	"github.com/ladzaretti/ragrat/llm"
+	"github.com/ladzaretti/ragrat/types"
 
 	"github.com/spf13/cobra"
 )
@@ -119,17 +120,28 @@ func (o *QueryOptions) Run(ctx context.Context, args ...string) error {
 		return nil
 	}
 
-	var temperature *float64
+	var (
+		temperature   *float64
+		contextLength int
+	)
 
 	i := slices.IndexFunc(
 		o.llmOptions.llmConfig.Models,
-		func(m ModelConfig) bool { return m.ID == selectedModel },
+		func(m types.ModelConfig) bool { return m.ID == selectedModel },
 	)
 	if i != -1 {
 		temperature = o.llmOptions.llmConfig.Models[i].Temperature
+		contextLength = o.llmOptions.llmConfig.Models[i].Context
 	}
 
-	ch := prompt.SendStream(ctx, provider.Session, selectedModel, temperature, p)
+	req := llm.ChatCompletionRequest{
+		Model:         selectedModel,
+		ContextLength: contextLength,
+		Temperature:   temperature,
+		Prompt:        p,
+	}
+
+	ch := prompt.SendStream(ctx, provider.Session, req)
 
 	if err := drainStream(ctx, ch, o.Print, setStatus, spinner.stop); err != nil {
 		return fmt.Errorf("response stream: %w", err)

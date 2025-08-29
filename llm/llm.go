@@ -101,8 +101,11 @@ func (*Client) Close() error {
 }
 
 type CompletionRequest struct {
-	Model  string
-	Prompt string
+	Model         string
+	SystemPrompt  string
+	Prompt        string
+	ContextLength int
+	Temperature   *float64
 }
 
 // GenerateCompletion creates a single-turn completion from a prompt.
@@ -115,15 +118,23 @@ func (c *Client) GenerateCompletion(ctx context.Context, req CompletionRequest) 
 	c.logger.Info("generate completion", "model", model)
 	c.logger.Debug("prompt", "text", req.Prompt)
 
-	params := openai.ChatCompletionNewParams{
-		Model: model,
-		Messages: []openai.ChatCompletionMessageParamUnion{
-			openai.UserMessage(req.Prompt),
-		},
+	messages := []openai.ChatCompletionMessageParamUnion{}
+
+	if req.SystemPrompt != "" {
+		messages = append(messages, openai.SystemMessage(req.SystemPrompt))
 	}
 
-	if c.temperature != nil {
-		params.Temperature = openai.Float(*c.temperature)
+	messages = append(messages, openai.UserMessage(req.Prompt))
+
+	params := openai.ChatCompletionNewParams{
+		Model:    model,
+		Messages: messages,
+	}
+
+	t := cmp.Or(req.Temperature, c.temperature)
+
+	if t != nil {
+		params.Temperature = openai.Float(*t)
 	}
 
 	completion, err := c.openaiClient.Chat.Completions.New(ctx, params)
@@ -349,29 +360,35 @@ func (s *ChatSession) ContextUsed() ContextUsage {
 	return ContextUsage{Used: s.contextUsed, Max: s.contextLength}
 }
 
-// TODO: req struct
+type ChatCompletionRequest struct {
+	Model         string
+	Prompt        string
+	ContextLength int
+	Temperature   *float64
+}
+
 // Send sends user messages and returns a response.
 // The assistant's reply is appended to the internal history.
-func (s *ChatSession) Send(ctx context.Context, model string, temperature *float64, contents ...string) (*ChatResponse, error) {
-	if model == "" {
+func (s *ChatSession) Send(ctx context.Context, req ChatCompletionRequest) (*ChatResponse, error) {
+	if req.Model == "" {
 		return nil, ErrNoModelSelected
 	}
 
-	s.logger.Info("send chat turn", "model", model, "history_len", len(s.history))
+	s.logger.Info("send chat turn", "model", req.Model, "history_len", len(s.history))
 
-	s.appendUserMessages(contents)
+	s.appendUserMessages(req.Prompt)
 
 	params := openai.ChatCompletionNewParams{
-		Model:    model,
+		Model:    req.Model,
 		Messages: s.history,
 	}
 
-	t := cmp.Or(temperature, s.temperature, s.client.temperature)
+	t := cmp.Or(req.Temperature, s.temperature, s.client.temperature)
 	if t != nil {
 		params.Temperature = openai.Float(*t)
 	}
 
-	s.logger.Debug("chat request", "model", model, "message_count", len(params.Messages))
+	s.logger.Debug("chat request", "model", req.Model, "message_count", len(params.Messages))
 
 	completion, err := s.client.openaiClient.Chat.Completions.New(ctx, params)
 	if err != nil {
@@ -402,24 +419,23 @@ func (s *ChatSession) Send(ctx context.Context, model string, temperature *float
 	}, nil
 }
 
-// TODO: req struct
 // SendStreaming sends user messages and returns a streaming response iterator.
 // The assistant's full reply is added to history after streaming completes.
-func (s *ChatSession) SendStreaming(ctx context.Context, model string, temperature *float64, contents ...string) (ChatResponseIterator, error) {
-	if model == "" {
+func (s *ChatSession) SendStreaming(ctx context.Context, req ChatCompletionRequest) (ChatResponseIterator, error) {
+	if req.Model == "" {
 		return nil, ErrNoModelSelected
 	}
 
-	s.logger.Info("start streaming request", "model", model)
+	s.logger.Info("start streaming request", "model", req.Model)
 
-	s.appendUserMessages(contents)
+	s.appendUserMessages(req.Prompt)
 
 	params := openai.ChatCompletionNewParams{
-		Model:    model,
+		Model:    req.Model,
 		Messages: s.history,
 	}
 
-	t := cmp.Or(temperature, s.temperature, s.client.temperature)
+	t := cmp.Or(req.Temperature, s.temperature, s.client.temperature)
 	if t != nil {
 		params.Temperature = openai.Float(*t)
 	}
@@ -476,11 +492,9 @@ func (s *ChatSession) SendStreaming(ctx context.Context, model string, temperatu
 	}, nil
 }
 
-// appendUserMessages appends user messages to the chat history.
-func (s *ChatSession) appendUserMessages(msgs []string) {
-	for _, msg := range msgs {
-		s.history = append(s.history, openai.UserMessage(msg))
-	}
+// appendUserMessages appends a user message to the chat history.
+func (s *ChatSession) appendUserMessages(msg string) {
+	s.history = append(s.history, openai.UserMessage(msg))
 }
 
 func (s *ChatSession) removeLastUserMessage() {

@@ -16,13 +16,13 @@ type Chunk struct {
 }
 
 // SendStream starts a streaming request and wires chunks back to [model.Update].
-func SendStream(ctx context.Context, s *llm.ChatSession, model string, temperature *float64, prompt string) <-chan Chunk {
+func SendStream(ctx context.Context, s *llm.ChatSession, req llm.ChatCompletionRequest) <-chan Chunk {
 	ch := make(chan Chunk)
 
 	go func() {
 		defer close(ch)
 
-		stream, err := s.SendStreaming(ctx, model, temperature, prompt)
+		stream, err := s.SendStreaming(ctx, req)
 		if err != nil {
 			ch <- Chunk{Err: err}
 			return

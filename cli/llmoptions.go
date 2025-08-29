@@ -8,9 +8,9 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/ladzaretti/ragrat/cli/types"
 	"github.com/ladzaretti/ragrat/genericclioptions"
 	"github.com/ladzaretti/ragrat/llm"
+	"github.com/ladzaretti/ragrat/types"
 	"github.com/ladzaretti/ragrat/vecdb"
 
 	"golang.org/x/sync/errgroup"
@@ -18,9 +18,9 @@ import (
 )
 
 type llmOptions struct {
-	llmConfig       LLMConfig
-	promptConfig    PromptConfig
-	embeddingConfig EmbeddingConfig
+	llmConfig       types.LLMConfig
+	promptConfig    types.PromptConfig
+	embeddingConfig types.EmbeddingConfig
 
 	providers    types.Providers
 	vectordb     *vecdb.VectorDB
@@ -222,7 +222,7 @@ func (o *llmOptions) embedData(ctx context.Context, logger *slog.Logger, cf *dat
 	return nil
 }
 
-func createClient(logger *slog.Logger, c ProviderConfig) (*llm.Client, error) {
+func createClient(logger *slog.Logger, c types.ProviderConfig) (*llm.Client, error) {
 	opts := []llm.Option{
 		llm.WithBaseURL(c.BaseURL),
 		llm.WithLogger(logger),

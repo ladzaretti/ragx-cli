@@ -2,10 +2,12 @@ package chatui
 
 import (
 	"context"
+	"slices"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/ladzaretti/ragrat/cli/prompt"
 	"github.com/ladzaretti/ragrat/llm"
+	"github.com/ladzaretti/ragrat/types"
 )
 
 type chunk = prompt.Chunk
@@ -62,8 +64,28 @@ func (m *model) startRAGCmd(ctx context.Context, query string) tea.Cmd {
 			return ragErr{err}
 		}
 
-		// FIXME: nil temp
-		ch := prompt.SendStream(ctx, provider.Session, llmModel, nil, p)
+		var (
+			temperature   *float64
+			contextLength int
+		)
+
+		i := slices.IndexFunc(
+			m.llmConfig.Models,
+			func(m types.ModelConfig) bool { return m.ID == llmModel },
+		)
+		if i != -1 {
+			temperature = m.llmConfig.Models[i].Temperature
+			contextLength = m.llmConfig.Models[i].Context
+		}
+
+		req := llm.ChatCompletionRequest{
+			Model:         llmModel,
+			Temperature:   temperature,
+			ContextLength: contextLength,
+			Prompt:        p,
+		}
+
+		ch := prompt.SendStream(ctx, provider.Session, req)
 
 		return ragReady{ch: ch}
 	}

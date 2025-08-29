@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ladzaretti/ragrat/cli/types"
 	"github.com/ladzaretti/ragrat/llm"
+	"github.com/ladzaretti/ragrat/types"
 	"github.com/ladzaretti/ragrat/vecdb"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -128,10 +128,11 @@ func (m *model) focus(f focus) {
 
 // LLMConfig contains high-level LLM settings for the RAG pipeline.
 type LLMConfig struct {
-	DefaultModel   string // DefaultModel is the model used for chat/generation when none is specified.
-	UserPromptTmpl string // UserPromptTmpl is a go template used to build the user query + context.
-	EmbeddingModel string // EmbeddingModel is the model used to produce embeddings.
-	RetrievalTopK  int    // RetrievalTopK is the number of results to fetch from the vector DB for RAG. Use 0 to disable retrieval.
+	Models         []types.ModelConfig // Models lists optional per model metadata.
+	DefaultModel   string              // DefaultModel is the model used for chat/generation when none is specified.
+	UserPromptTmpl string              // UserPromptTmpl is a go template used to build the user query + context.
+	EmbeddingModel string              // EmbeddingModel is the model used to produce embeddings.
+	RetrievalTopK  int                 // RetrievalTopK is the number of results to fetch from the vector DB for RAG. Use 0 to disable retrieval.
 }
 
 // New creates a new [model].

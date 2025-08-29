@@ -13,6 +13,7 @@ import (
 	"github.com/ladzaretti/ragrat/cli/prompt"
 	"github.com/ladzaretti/ragrat/clierror"
 	"github.com/ladzaretti/ragrat/genericclioptions"
+	"github.com/ladzaretti/ragrat/types"
 
 	"github.com/spf13/cobra"
 )
@@ -29,23 +30,23 @@ type configOptions struct {
 }
 
 type EnvConfig struct {
-	providers []ProviderConfig
+	providers []types.ProviderConfig
 }
 
 func (env *EnvConfig) load() { env.providers = providersFromEnv() }
 
-func providersFromEnv() []ProviderConfig {
+func providersFromEnv() []types.ProviderConfig {
 	baseURL, ok := os.LookupEnv("OPENAI_API_BASE")
 	if !ok {
 		return nil
 	}
 
-	openai := ProviderConfig{
+	openai := types.ProviderConfig{
 		BaseURL: baseURL,
 		APIKey:  os.Getenv("OPENAI_API_KEY"),
 	}
 
-	return []ProviderConfig{openai}
+	return []types.ProviderConfig{openai}
 }
 
 // Flags holds cli overrides for configuration.
@@ -124,7 +125,7 @@ func (o *configOptions) Validate() (retErr error) {
 	}
 
 	for _, p := range o.envConfig.providers {
-		retErr = errors.Join(retErr, p.validate())
+		retErr = errors.Join(retErr, validateProviderConfig(p))
 	}
 
 	return

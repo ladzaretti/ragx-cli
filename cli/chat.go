@@ -56,6 +56,7 @@ func (o *ChatOptions) Run(ctx context.Context, args ...string) error {
 
 	var (
 		config = chatui.LLMConfig{
+			Models:         o.llmConfig.Models,
 			DefaultModel:   o.llmConfig.DefaultModel,
 			UserPromptTmpl: o.promptConfig.UserPromptTmpl,
 			EmbeddingModel: o.embeddingConfig.Model,

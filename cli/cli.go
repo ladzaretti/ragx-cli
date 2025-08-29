@@ -10,6 +10,7 @@ import (
 
 	"github.com/ladzaretti/ragrat/clierror"
 	"github.com/ladzaretti/ragrat/genericclioptions"
+	"github.com/ladzaretti/ragrat/types"
 	"github.com/ladzaretti/ragrat/vecdb"
 
 	"github.com/spf13/cobra"
@@ -49,7 +50,7 @@ const (
 	reasoningEndTag   = "</think>"
 )
 
-var defaultProvider = ProviderConfig{
+var defaultProvider = types.ProviderConfig{
 	BaseURL: defaultBaseURL,
 }
 
