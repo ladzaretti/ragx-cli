@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"io"
@@ -22,28 +23,32 @@ type llmOptions struct {
 	promptConfig    types.PromptConfig
 	embeddingConfig types.EmbeddingConfig
 
-	providers    types.Providers
-	vectordb     *vecdb.VectorDB
-	dim          int
-	embeddingREs []*regexp.Regexp
+	providers          types.Providers
+	vectordb           *vecdb.VectorDB
+	dim                int
+	defaultContext     int
+	defaultTemperature *float64
+	embeddingREs       []*regexp.Regexp
 }
 
 var _ genericclioptions.BaseOptions = &llmOptions{}
 
 func (*llmOptions) Complete() error { return nil }
 
-func (*llmOptions) Validate() error { return nil }
+func (o *llmOptions) Validate() error { return validateTemperature(o.defaultTemperature) }
 
 func (o *llmOptions) initProviders(logger *slog.Logger) error {
 	o.providers = make([]*types.Provider, 0, len(o.llmConfig.Providers))
 
-	for _, c := range o.llmConfig.Providers {
-		client, err := createClient(logger, c)
+	for _, p := range o.llmConfig.Providers {
+		client, err := createClient(logger, p)
 		if err != nil {
 			return err
 		}
 
-		session, err := createSession(logger, client, c.Temperature, o.promptConfig.System)
+		temperature := cmp.Or(p.Temperature, o.defaultTemperature)
+
+		session, err := createSession(logger, client, temperature, o.defaultContext, o.promptConfig.System)
 		if err != nil {
 			return err
 		}
@@ -237,10 +242,11 @@ func createClient(logger *slog.Logger, c types.ProviderConfig) (*llm.Client, err
 	return client, nil
 }
 
-func createSession(logger *slog.Logger, client *llm.Client, temperature *float64, systemPrompt string) (*llm.ChatSession, error) {
+func createSession(logger *slog.Logger, client *llm.Client, temperature *float64, defaultContext int, systemPrompt string) (*llm.ChatSession, error) {
 	sessionOpts := []llm.SessionOpt{
 		llm.WithSessionLogger(logger),
 		llm.WithSessionTemperature(temperature),
+		llm.WithDefaultContextLength(defaultContext),
 	}
 
 	session, err := llm.NewChat(client, systemPrompt, sessionOpts...)

@@ -282,12 +282,12 @@ type ApproxTokenCounter struct{}
 // Not thread safe, create a separate ChatSession per goroutine
 // or protect calls with a mutex.
 type ChatSession struct {
-	logger        *slog.Logger
-	client        *Client
-	history       []openai.ChatCompletionMessageParamUnion
-	temperature   *float64
-	contextLength int
-	contextUsed   int
+	logger         *slog.Logger
+	client         *Client
+	history        []openai.ChatCompletionMessageParamUnion
+	temperature    *float64
+	defaultContext int
+	contextUsed    int
 
 	tokenCounter TokenCounter
 }
@@ -315,10 +315,10 @@ func WithTokenCounter(tc TokenCounter) SessionOpt {
 	}
 }
 
-// WithContextLength sets the maximum context length (in tokens) for a session.
-func WithContextLength(l int) SessionOpt {
+// WithDefaultContextLength sets the maximum context length (in tokens) for a session.
+func WithDefaultContextLength(l int) SessionOpt {
 	return func(o *ChatSession) {
-		o.contextLength = l
+		o.defaultContext = l
 	}
 }
 
@@ -357,7 +357,7 @@ type ContextUsage struct{ Used, Max int }
 
 // ContextUsed returns the number of tokens currently used in the session context.
 func (s *ChatSession) ContextUsed() ContextUsage {
-	return ContextUsage{Used: s.contextUsed, Max: s.contextLength}
+	return ContextUsage{Used: s.contextUsed, Max: s.defaultContext}
 }
 
 type ChatCompletionRequest struct {

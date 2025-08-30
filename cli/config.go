@@ -53,6 +53,8 @@ func providersFromEnv() []types.ProviderConfig {
 type Flags struct {
 	configPath     string
 	model          string
+	temperature    float64
+	contextLength  int
 	embeddingModel string
 	logDir         string
 	logFilename    string
@@ -141,6 +143,8 @@ func NewCmdConfig(defaults *DefaultRAGOptions) *cobra.Command {
 		"embedding-model",
 		"match",
 		"model",
+		"temp",
+		"context",
 	}
 
 	o := NewConfigOptions(defaults.StdioOptions)

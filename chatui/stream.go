@@ -1,6 +1,7 @@
 package chatui
 
 import (
+	"cmp"
 	"context"
 	"slices"
 
@@ -74,8 +75,8 @@ func (m *model) startRAGCmd(ctx context.Context, query string) tea.Cmd {
 			func(m types.ModelConfig) bool { return m.ID == llmModel },
 		)
 		if i != -1 {
-			temperature = m.llmConfig.Models[i].Temperature
-			contextLength = m.llmConfig.Models[i].Context
+			temperature = cmp.Or(m.llmConfig.Models[i].Temperature, m.llmConfig.DefaultTemperature)
+			contextLength = cmp.Or(m.llmConfig.Models[i].Context, m.llmConfig.DefaultContext)
 		}
 
 		req := llm.ChatCompletionRequest{

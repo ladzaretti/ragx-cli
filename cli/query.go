@@ -130,8 +130,8 @@ func (o *QueryOptions) Run(ctx context.Context, args ...string) error {
 		func(m types.ModelConfig) bool { return m.ID == selectedModel },
 	)
 	if i != -1 {
-		temperature = o.llmOptions.llmConfig.Models[i].Temperature
-		contextLength = o.llmOptions.llmConfig.Models[i].Context
+		temperature = cmp.Or(o.llmOptions.llmConfig.Models[i].Temperature, o.llmOptions.defaultTemperature)
+		contextLength = cmp.Or(o.llmOptions.llmConfig.Models[i].Context, o.llmOptions.defaultContext)
 	}
 
 	req := llm.ChatCompletionRequest{

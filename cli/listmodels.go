@@ -73,6 +73,8 @@ func NewCmdListModels(defaults *DefaultRAGOptions) *cobra.Command {
 		"embedding-model",
 		"match",
 		"model",
+		"temp",
+		"context",
 	}
 
 	genericclioptions.MarkFlagsHidden(cmd, hiddenFlags...)

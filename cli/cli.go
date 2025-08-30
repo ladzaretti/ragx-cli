@@ -110,12 +110,24 @@ func (o *DefaultRAGOptions) complete() error { //nolint:revive
 	o.llmOptions.promptConfig = *o.configOptions.resolved.Prompt
 	o.llmOptions.embeddingConfig = *o.configOptions.resolved.Embedding
 	o.llmOptions.embeddingREs = matchREs
+	o.llmOptions.defaultContext = max(o.configOptions.flags.contextLength, 0)
+	o.llmOptions.defaultTemperature = func(v float64) *float64 {
+		if v == -1 {
+			return nil
+		}
+
+		return &v
+	}(o.configOptions.flags.temperature)
 
 	return nil
 }
 
 func (o *DefaultRAGOptions) Validate() error {
 	if err := o.StdioOptions.Validate(); err != nil {
+		return err
+	}
+
+	if err := o.llmOptions.Validate(); err != nil {
 		return err
 	}
 
@@ -246,6 +258,8 @@ Embed data, run retrieval, and query local or remote OpenAI API-compatible LLMs.
 
 	cmd.SetArgs(args)
 
+	cmd.PersistentFlags().Float64VarP(&o.configOptions.flags.temperature, "temp", "t", -1, "default sampling temperature (0.0-2.0)")
+	cmd.PersistentFlags().IntVarP(&o.configOptions.flags.contextLength, "context", "x", -1, "default context length in tokens")
 	cmd.PersistentFlags().StringVarP(&o.configOptions.flags.model, "model", "m", "", "set LLM model")
 	cmd.PersistentFlags().StringVarP(&o.configOptions.flags.configPath, "config", "c", "", fmt.Sprintf("path to config file (default: ~/%s)", defaultConfigName))
 	cmd.PersistentFlags().StringVarP(&o.configOptions.flags.embeddingModel, "embedding-model", "e", "", "set embedding model")
@@ -264,6 +278,8 @@ Embed data, run retrieval, and query local or remote OpenAI API-compatible LLMs.
 		"log-level",
 		"match",
 		"model",
+		"temp",
+		"context",
 	}
 
 	genericclioptions.MarkFlagsHidden(cmd, hiddenFlags...)

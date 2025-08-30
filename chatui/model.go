@@ -1,6 +1,7 @@
 package chatui
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -128,11 +129,13 @@ func (m *model) focus(f focus) {
 
 // LLMConfig contains high-level LLM settings for the RAG pipeline.
 type LLMConfig struct {
-	Models         []types.ModelConfig // Models lists optional per model metadata.
-	DefaultModel   string              // DefaultModel is the model used for chat/generation when none is specified.
-	UserPromptTmpl string              // UserPromptTmpl is a go template used to build the user query + context.
-	EmbeddingModel string              // EmbeddingModel is the model used to produce embeddings.
-	RetrievalTopK  int                 // RetrievalTopK is the number of results to fetch from the vector DB for RAG. Use 0 to disable retrieval.
+	Models             []types.ModelConfig // Models lists optional per model metadata.
+	DefaultModel       string              // DefaultModel is the model used for chat/generation when none is specified.
+	UserPromptTmpl     string              // UserPromptTmpl is a go template used to build the user query + context.
+	EmbeddingModel     string              // EmbeddingModel is the model used to produce embeddings.
+	RetrievalTopK      int                 // RetrievalTopK is the number of results to fetch from the vector DB for RAG. Use 0 to disable retrieval.
+	DefaultContext     int                 // DefaultContext is the fallback maximum context length (in tokens).
+	DefaultTemperature *float64            // DefaultTemperature is the fallback sampling temperature.
 }
 
 // New creates a new [model].
@@ -372,10 +375,19 @@ func (m *model) View() string {
 	if m.lastErr != "" {
 		footerItems = append(footerItems, errorStatusStyle.Render(m.lastErr))
 	} else {
+		var (
+			context          = cmp.Or(m.contextUsed.Max, m.llmConfig.DefaultContext)
+			used, percentage = m.contextUsed.Used, 0
+		)
+
+		if context > 0 {
+			percentage = min((used*100)/context, 100)
+		}
+
 		footerItems = append(footerItems,
 			truncate(selectedModelStatusStyle, m.selectedModel, 28),
 			truncate(embedSelectedModelStatusStyle, m.llmConfig.EmbeddingModel, 22),
-			contextStatusStyle.Render(fmt.Sprintf("Ctx %d/%d", m.contextUsed.Used, m.contextUsed.Max)),
+			contextStatusStyle.Render(fmt.Sprintf("Ctx %d%%", percentage)),
 		)
 	}
 
