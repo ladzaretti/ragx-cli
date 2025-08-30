@@ -54,7 +54,7 @@ type model struct {
 	// focus management
 
 	currentFocus focus
-	leaderActive bool
+	prefixActive bool
 
 	// state
 
@@ -364,8 +364,8 @@ func (m *model) View() string {
 	main := lipgloss.JoinVertical(lipgloss.Left, left...)
 
 	modeLabel, legendItemStyle := m.currentFocus.String(), m.currentFocus.style()
-	if m.leaderActive {
-		modeLabel, legendItemStyle = "leader", leaderStatusStyle
+	if m.prefixActive {
+		modeLabel, legendItemStyle = "prefix", prefixStatusStyle
 	}
 
 	footerItems := []string{
@@ -424,11 +424,11 @@ func (m *model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case "ctrl+a":
-		m.leaderActive = !m.leaderActive
+		m.prefixActive = !m.prefixActive
 
 		m.refreshLegend()
 
-		if m.leaderActive {
+		if m.prefixActive {
 			m.legendWrapped = lipgloss.NewStyle().Width(m.width).Render(m.legend())
 			m.textarea.Blur()
 
@@ -440,8 +440,8 @@ func (m *model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, textinput.Blink
 
 	case "esc": //nolint:goconst
-		if m.leaderActive {
-			m.leaderActive = false
+		if m.prefixActive {
+			m.prefixActive = false
 
 			m.refreshLegend()
 			m.focus(focusTextarea)
@@ -464,9 +464,9 @@ func (m *model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	default:
 	}
 
-	if m.leaderActive {
+	if m.prefixActive {
 		m.refreshLegend()
-		return m.handleLeaderKey(k.String())
+		return m.handlePrefixKey(k.String())
 	}
 
 	switch m.currentFocus {
@@ -483,7 +483,7 @@ func (m *model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 //nolint:unparam
-var leaderMap = map[string]func(*model) (tea.Model, tea.Cmd){
+var prefixMap = map[string]func(*model) (tea.Model, tea.Cmd){
 	"q": func(m *model) (tea.Model, tea.Cmd) { return m, tea.Quit },
 	"h": func(m *model) (tea.Model, tea.Cmd) { m.focus(focusViewport); return m, nil },
 	"m": func(m *model) (tea.Model, tea.Cmd) { m.focus(focusModelList); return m, nil },
@@ -510,13 +510,13 @@ var leaderMap = map[string]func(*model) (tea.Model, tea.Cmd){
 	},
 }
 
-func (m *model) handleLeaderKey(k string) (tea.Model, tea.Cmd) {
-	m.leaderActive = false
-	if f, ok := leaderMap[k]; ok {
+func (m *model) handlePrefixKey(k string) (tea.Model, tea.Cmd) {
+	m.prefixActive = false
+	if f, ok := prefixMap[k]; ok {
 		return f(m)
 	}
 
-	// Unknown leader key — return to textarea
+	// Unknown prefix key — return to textarea
 	if m.currentFocus == focusTextarea {
 		m.focus(focusTextarea)
 
@@ -684,7 +684,7 @@ func (m *model) legend() string {
 	}
 
 	switch {
-	case m.leaderActive:
+	case m.prefixActive:
 		return lipgloss.JoinHorizontal(lipgloss.Left,
 			legendItem("H", "HISTORY"), divider,
 			legendItem("R", m.reasoningLegendLabel()), divider,
@@ -712,7 +712,7 @@ func (m *model) legend() string {
 		return lipgloss.JoinHorizontal(lipgloss.Left,
 			legendItem("^S", "SEND"), divider,
 			legendItem("ESC", "CANCEL"), divider,
-			legendItem("^A", "LEADER MODE"), divider,
+			legendItem("^A", "PREFIX"), divider,
 			legendItem("^C", "QUIT"),
 		)
 	}

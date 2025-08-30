@@ -54,7 +54,7 @@ var (
 	selectedItemStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(mochaLavender)).Bold(true).Padding(0, 1)
 
 	insertStatusStyle             = lipgloss.NewStyle().Background(lipgloss.Color(mochaMauve)).Foreground(lipgloss.Color(mochaCrust)).Bold(true).Padding(0, 1)
-	leaderStatusStyle             = lipgloss.NewStyle().Background(lipgloss.Color(mochaLavender)).Foreground(lipgloss.Color(mochaCrust)).Bold(true).Padding(0, 1)
+	prefixStatusStyle             = lipgloss.NewStyle().Background(lipgloss.Color(mochaLavender)).Foreground(lipgloss.Color(mochaCrust)).Bold(true).Padding(0, 1)
 	historyStatusStyle            = lipgloss.NewStyle().Background(lipgloss.Color(mochaBlue)).Foreground(lipgloss.Color(mochaCrust)).Bold(true).Padding(0, 1)
 	modelsStatusStyle             = lipgloss.NewStyle().Background(lipgloss.Color(mochaYellow)).Foreground(lipgloss.Color(mochaCrust)).Bold(true).Padding(0, 1)
 	defaultStatusStyle            = lipgloss.NewStyle().Background(lipgloss.Color(mochaSurface0)).Foreground(lipgloss.Color(mochaText)).Bold(true).Padding(0, 1)
