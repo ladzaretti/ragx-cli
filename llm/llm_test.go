@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/ladzaretti/ragrat/llm"
+	"github.com/ladzaretti/ragrep/llm"
 
 	openai "github.com/openai/openai-go/v2"
 )

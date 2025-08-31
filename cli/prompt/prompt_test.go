@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/ladzaretti/ragrat/cli/prompt"
-	"github.com/ladzaretti/ragrat/vecdb"
+	"github.com/ladzaretti/ragrep/cli/prompt"
+	"github.com/ladzaretti/ragrep/vecdb"
 )
 
 func TestPrompt_BuildUserPrompt(t *testing.T) {

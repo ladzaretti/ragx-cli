@@ -1,9 +1,9 @@
 version: 2
 
 builds:
-  - id: "ragrat"
-    main: ./cmd/ragrat
-    binary: ragrat
+  - id: "ragrep"
+    main: ./cmd/ragrep
+    binary: ragrep
     goos:
       - linux
     ldflags:
@@ -13,12 +13,12 @@ snapshot:
   version_template: "{{ .Version }}-devel+{{ .ShortCommit }}"
 
 archives:
-  - id: "ragrat"
-    name_template: "ragrat_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+  - id: "ragrep"
+    name_template: "ragrep_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     wrap_in_directory: true
 
     files:
       - UNLICENSE
 
-    ids: [ragrat]
+    ids: [ragrep]
     formats: [tar.gz]

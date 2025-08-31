@@ -6,9 +6,9 @@ import (
 	"slices"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/ladzaretti/ragrat/cli/prompt"
-	"github.com/ladzaretti/ragrat/llm"
-	"github.com/ladzaretti/ragrat/types"
+	"github.com/ladzaretti/ragrep/cli/prompt"
+	"github.com/ladzaretti/ragrep/llm"
+	"github.com/ladzaretti/ragrep/types"
 )
 
 type chunk = prompt.Chunk

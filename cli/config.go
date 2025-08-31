@@ -10,10 +10,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/ladzaretti/ragrat/cli/prompt"
-	"github.com/ladzaretti/ragrat/clierror"
-	"github.com/ladzaretti/ragrat/genericclioptions"
-	"github.com/ladzaretti/ragrat/types"
+	"github.com/ladzaretti/ragrep/cli/prompt"
+	"github.com/ladzaretti/ragrep/clierror"
+	"github.com/ladzaretti/ragrep/genericclioptions"
+	"github.com/ladzaretti/ragrep/types"
 
 	"github.com/spf13/cobra"
 )
@@ -152,7 +152,7 @@ func NewCmdConfig(defaults *DefaultRAGOptions) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "config",
 		Short: "Show and inspect configuration",
-		Long: fmt.Sprintf(`Show the active ragrat configuration.
+		Long: fmt.Sprintf(`Show the active ragrep configuration.
 
 If --config is not provided, the default path (~/%s) is used.`, defaultConfigName),
 		RunE: func(cmd *cobra.Command, _ []string) error {

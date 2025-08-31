@@ -1,4 +1,4 @@
-module github.com/ladzaretti/ragrat
+module github.com/ladzaretti/ragrep
 
 go 1.24.0
 
