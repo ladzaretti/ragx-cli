@@ -41,17 +41,13 @@ func (o *llmOptions) initProviders(logger *slog.Logger) error {
 	o.providers = make([]*types.Provider, 0, len(o.llmConfig.Providers))
 
 	for _, p := range o.llmConfig.Providers {
-		client, err := createClient(logger, p)
-		if err != nil {
-			return err
-		}
+		client := createClient(logger, p)
 
 		temperature := cmp.Or(p.Temperature, o.defaultTemperature)
 
-		session, err := createSession(logger, client, temperature, o.defaultContext, o.promptConfig.System)
-		if err != nil {
-			return err
-		}
+		session := createSession(logger, client,
+			temperature, o.defaultContext, o.promptConfig.System,
+		)
 
 		p := &types.Provider{
 			Client:  client,
@@ -227,34 +223,24 @@ func (o *llmOptions) embedData(ctx context.Context, logger *slog.Logger, cf *dat
 	return nil
 }
 
-func createClient(logger *slog.Logger, c types.ProviderConfig) (*llm.Client, error) {
+func createClient(logger *slog.Logger, c types.ProviderConfig) *llm.Client {
 	opts := []llm.Option{
 		llm.WithBaseURL(c.BaseURL),
 		llm.WithLogger(logger),
 		llm.WithTemperature(c.Temperature),
 	}
 
-	client, err := llm.NewClient(opts...)
-	if err != nil {
-		return nil, errf("new client: %v", err)
-	}
-
-	return client, nil
+	return llm.NewClient(opts...)
 }
 
-func createSession(logger *slog.Logger, client *llm.Client, temperature *float64, defaultContext int, systemPrompt string) (*llm.ChatSession, error) {
+func createSession(logger *slog.Logger, client *llm.Client, temperature *float64, defaultContext int, systemPrompt string) *llm.ChatSession {
 	sessionOpts := []llm.SessionOpt{
 		llm.WithSessionLogger(logger),
 		llm.WithSessionTemperature(temperature),
 		llm.WithDefaultContextLength(defaultContext),
 	}
 
-	session, err := llm.NewChat(client, systemPrompt, sessionOpts...)
-	if err != nil {
-		return nil, errf("new chat session: %v", err)
-	}
-
-	return session, nil
+	return llm.NewChat(client, systemPrompt, sessionOpts...)
 }
 
 func toFloat32Slice(src []float64) (f32 []float32) {

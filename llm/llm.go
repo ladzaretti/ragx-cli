@@ -77,7 +77,7 @@ func WithTemperature(t *float64) Option {
 }
 
 // NewClient creates a new OpenAI client.
-func NewClient(opts ...Option) (*Client, error) {
+func NewClient(opts ...Option) *Client {
 	c := &config{}
 
 	for _, opt := range opts {
@@ -92,13 +92,15 @@ func NewClient(opts ...Option) (*Client, error) {
 	return &Client{
 		openaiClient: openai.NewClient(options...),
 		config:       *c,
-	}, nil
+	}
 }
 
 // Close releases any resources (no-op for OpenAI).
 func (*Client) Close() error {
 	return nil
 }
+
+type ChatMessage = openai.ChatCompletionMessageParamUnion
 
 type CompletionRequest struct {
 	Model         string
@@ -118,7 +120,7 @@ func (c *Client) GenerateCompletion(ctx context.Context, req CompletionRequest) 
 	c.logger.Info("generate completion", "model", model)
 	c.logger.Debug("prompt", "text", req.Prompt)
 
-	messages := []openai.ChatCompletionMessageParamUnion{}
+	messages := []ChatMessage{}
 
 	if req.SystemPrompt != "" {
 		messages = append(messages, openai.SystemMessage(req.SystemPrompt))
@@ -284,7 +286,8 @@ type ApproxTokenCounter struct{}
 type ChatSession struct {
 	logger         *slog.Logger
 	client         *Client
-	history        []openai.ChatCompletionMessageParamUnion
+	systemPrompt   string
+	history        []ChatMessage
 	temperature    *float64
 	defaultContext int
 	contextUsed    int
@@ -323,25 +326,30 @@ func WithDefaultContextLength(l int) SessionOpt {
 }
 
 // NewChat creates a new chat session with optional system prompt.
-func NewChat(c *Client, systemPrompt string, opts ...SessionOpt) (*ChatSession, error) {
+func NewChat(c *Client, systemPrompt string, opts ...SessionOpt) *ChatSession {
 	session := &ChatSession{
 		client:       c,
 		logger:       slog.Default(),
+		systemPrompt: systemPrompt,
 		tokenCounter: ApproxTokenCounter{},
 	}
 
+	return session.NewChat(opts...)
+}
+
+func (s *ChatSession) NewChat(opts ...SessionOpt) *ChatSession {
 	for _, o := range opts {
-		o(session)
+		o(s)
 	}
 
-	history := []openai.ChatCompletionMessageParamUnion{}
-	if systemPrompt != "" {
-		history = append(history, openai.SystemMessage(systemPrompt))
+	history := []ChatMessage{}
+	if s.systemPrompt != "" {
+		history = append(history, openai.SystemMessage(s.systemPrompt))
 	}
 
-	session.history = history
+	s.history = history
 
-	return session, nil
+	return s
 }
 
 // ChatResponseIterator is a streaming sequence of chat responses.
@@ -380,7 +388,7 @@ func (s *ChatSession) Send(ctx context.Context, req ChatCompletionRequest) (*Cha
 
 	params := openai.ChatCompletionNewParams{
 		Model:    req.Model,
-		Messages: s.history,
+		Messages: TruncateHistory(s.tokenCounter, s.history, s.defaultContext),
 	}
 
 	t := cmp.Or(req.Temperature, s.temperature, s.client.temperature)
@@ -432,7 +440,7 @@ func (s *ChatSession) SendStreaming(ctx context.Context, req ChatCompletionReque
 
 	params := openai.ChatCompletionNewParams{
 		Model:    req.Model,
-		Messages: s.history,
+		Messages: TruncateHistory(s.tokenCounter, s.history, s.defaultContext),
 	}
 
 	t := cmp.Or(req.Temperature, s.temperature, s.client.temperature)
@@ -523,6 +531,52 @@ func (e *APIError) Error() string {
 
 func (e *APIError) Unwrap() error {
 	return e.Err
+}
+
+func TruncateHistory(tc TokenCounter, msgs []ChatMessage, limit int) []ChatMessage {
+	if len(msgs) == 0 {
+		return nil
+	}
+
+	if limit == 0 {
+		return append([]ChatMessage(nil), msgs...)
+	}
+
+	if used := tc.Count(msgs...); used < limit {
+		return append([]ChatMessage(nil), msgs...)
+	}
+
+	headEnd := 0
+	for headEnd < len(msgs) && msgs[headEnd].OfSystem != nil {
+		headEnd++
+	}
+
+	head := append([]ChatMessage(nil), msgs[:headEnd]...)
+	tail := append([]ChatMessage(nil), msgs[headEnd:]...)
+
+	var (
+		headTokens = tc.Count(head...)
+		tailCounts = make([]int, len(tail))
+		tailTokens = 0
+	)
+
+	for i, msg := range tail {
+		c := tc.Count(msg)
+		tailCounts[i] = c
+		tailTokens += c
+	}
+
+	for len(tail) > 0 && headTokens+tailTokens > limit {
+		if len(tail) >= 2 && tail[0].OfUser != nil && tail[1].OfAssistant != nil {
+			tailTokens -= tailCounts[0] + tailCounts[1]
+			tail, tailCounts = tail[2:], tailCounts[2:]
+		} else {
+			tailTokens -= tailCounts[0]
+			tail, tailCounts = tail[1:], tailCounts[1:]
+		}
+	}
+
+	return append(head, tail...)
 }
 
 // IsRetryableError returns true if the error is retryable.
