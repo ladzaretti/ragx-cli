@@ -75,6 +75,8 @@ type model struct {
 	listWidth     int
 	legendHeight  int
 	legendWrapped string
+	statusHeight  int
+	statusWrapped string
 }
 
 // focus is the current component in focus.
@@ -391,7 +393,7 @@ func (m *model) View() string {
 		)
 	}
 
-	status := barStyle.Width(m.width).
+	m.statusWrapped = barStyle.Width(m.width).
 		Render(lipgloss.JoinHorizontal(lipgloss.Left, footerItems...))
 
 	var b strings.Builder
@@ -408,7 +410,7 @@ func (m *model) View() string {
 	b.WriteString("\n")
 	b.WriteString(m.legendWrapped)
 	b.WriteString("\n")
-	b.WriteString(status)
+	b.WriteString(m.statusWrapped)
 
 	if m.currentFocus == focusModelList {
 		return m.renderModelPopup()
@@ -619,13 +621,14 @@ func (m *model) resize(w tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	m.refreshLegend()
 
 	m.legendHeight = lipgloss.Height(m.legendWrapped)
+	m.statusHeight = lipgloss.Height(m.statusWrapped)
 
 	reserved := extraLines
 	if m.asciiShow {
 		reserved += asciiLines
 	}
 
-	availHeight := w.Height - m.textarea.Height() - m.legendHeight - reserved
+	availHeight := w.Height - m.textarea.Height() - m.legendHeight - m.statusHeight - reserved
 
 	m.viewport.Height = max(availHeight, 1)
 	m.modelList.SetSize(m.listWidth, availHeight)
