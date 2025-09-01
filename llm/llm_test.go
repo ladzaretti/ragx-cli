@@ -9,16 +9,6 @@ import (
 	openai "github.com/openai/openai-go/v2"
 )
 
-type countMsgs struct{}
-
-func (countMsgs) Count(msgs ...llm.ChatMessage) int { return len(msgs) }
-
-func sys() llm.ChatMessage { return openai.SystemMessage("") }
-
-func user() llm.ChatMessage { return openai.UserMessage("") }
-
-func asst() llm.ChatMessage { return openai.AssistantMessage("") }
-
 func TestTruncateHistory(t *testing.T) {
 	type testCase struct {
 		name         string
@@ -28,7 +18,7 @@ func TestTruncateHistory(t *testing.T) {
 		want         []llm.ChatMessage
 	}
 
-	s, u1, a1, u2, a2, u3, a3 := sys(), user(), asst(), user(), asst(), user(), asst()
+	s, u1, a1, u2, a2, u3, a3 := sys("s"), user("u1"), asst("a1"), user("u2"), asst("a2"), user("u3"), asst("a3")
 	tc := countMsgs{}
 
 	tests := []testCase{
@@ -87,18 +77,28 @@ func TestTruncateHistory(t *testing.T) {
 	}
 }
 
+type countMsgs struct{}
+
+var _ llm.TokenCounter = countMsgs{}
+
+func (countMsgs) Count(msgs ...llm.ChatMessage) int { return len(msgs) }
+
+func sys(s string) llm.ChatMessage  { return openai.SystemMessage(s) }
+func user(s string) llm.ChatMessage { return openai.UserMessage(s) }
+func asst(s string) llm.ChatMessage { return openai.AssistantMessage(s) }
+
 func compareMsgs(a, b llm.ChatMessage) bool {
 	switch {
 	case a.OfSystem != nil || b.OfSystem != nil:
-		return a.OfSystem != nil && b.OfSystem != nil &&
+		return (a.OfSystem != nil) && (b.OfSystem != nil) &&
 			a.OfSystem == b.OfSystem
 
 	case a.OfUser != nil || b.OfUser != nil:
-		return a.OfUser != nil && b.OfUser != nil &&
+		return (a.OfUser != nil) && (b.OfUser != nil) &&
 			a.OfUser == b.OfUser
 
 	case a.OfAssistant != nil || b.OfAssistant != nil:
-		return a.OfAssistant != nil && b.OfAssistant != nil &&
+		return (a.OfAssistant != nil) && (b.OfAssistant != nil) &&
 			a.OfAssistant == b.OfAssistant
 
 	default:
