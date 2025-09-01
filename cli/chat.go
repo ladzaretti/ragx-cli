@@ -5,9 +5,9 @@ import (
 	"errors"
 	"io"
 
-	"github.com/ladzaretti/ragrep/chatui"
-	"github.com/ladzaretti/ragrep/clierror"
-	"github.com/ladzaretti/ragrep/genericclioptions"
+	"github.com/ladzaretti/ragx/chatui"
+	"github.com/ladzaretti/ragx/clierror"
+	"github.com/ladzaretti/ragx/genericclioptions"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
@@ -95,13 +95,13 @@ then launches an interactive TUI for chatting with the LLM. Directories are walk
 When paths are provided, files are included if they match any -M/--match regex (full path).
 If no -M filter is given, all files under the provided paths are embedded.`,
 		Example: `  # embed all .go files in current dir and start the TUI
-  ragrep chat . -M '\.go$'
+  ragx chat . -M '\.go$'
 
   # embed multiple paths (markdown and txt) and start the TUI
-  ragrep chat ./docs ./src -M '(?i)\.(md|txt)$'
+  ragx chat ./docs ./src -M '(?i)\.(md|txt)$'
 
   # embed stdin and start the TUI
-  cat readme.md | ragrep chat`,
+  cat readme.md | ragx chat`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return clierror.Check(genericclioptions.ExecuteCommand(cmd.Context(), o, args...))
 		},

@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ladzaretti/ragrep/llm"
-	"github.com/ladzaretti/ragrep/types"
-	"github.com/ladzaretti/ragrep/vecdb"
+	"github.com/ladzaretti/ragx/llm"
+	"github.com/ladzaretti/ragx/types"
+	"github.com/ladzaretti/ragx/vecdb"
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"

@@ -1,6 +1,6 @@
 .DEFAULT_GOAL = build
 
-BIN_NAME ?= ragrep
+BIN_NAME ?= ragx
 
 VERSION ?= 0.0.0
 

@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 	"regexp"
 
-	"github.com/ladzaretti/ragrep/clierror"
-	"github.com/ladzaretti/ragrep/genericclioptions"
-	"github.com/ladzaretti/ragrep/types"
-	"github.com/ladzaretti/ragrep/vecdb"
+	"github.com/ladzaretti/ragx/clierror"
+	"github.com/ladzaretti/ragx/genericclioptions"
+	"github.com/ladzaretti/ragx/types"
+	"github.com/ladzaretti/ragx/vecdb"
 
 	"github.com/spf13/cobra"
 )
@@ -34,10 +34,10 @@ const (
 )
 
 const (
-	appName                  = "ragrep"
-	envConfigPathKeyOverride = "ragrep_CONFIG_PATH"
+	appName                  = "ragx"
+	envConfigPathKeyOverride = "ragx_CONFIG_PATH"
 	defaultBaseURL           = "http://localhost:11434/v1"
-	defaultConfigName        = ".ragrep.toml"
+	defaultConfigName        = ".ragx.toml"
 	defaultLogFilename       = ".log"
 	defaultLogLevel          = "info"
 	defaultChunkSize         = 2000
@@ -58,7 +58,7 @@ type cleanupFunc func() error
 
 type step func(ctx context.Context, args ...string) error
 
-// DefaultRAGOptions is the base cli config shared across all ragrep subcommands.
+// DefaultRAGOptions is the base cli config shared across all ragx subcommands.
 type DefaultRAGOptions struct {
 	*genericclioptions.StdioOptions
 
@@ -239,12 +239,12 @@ func NewDefaultRAGCommand(iostreams *genericclioptions.IOStreams, args []string)
 	o := NewDefaultRAGOptions(iostreams)
 
 	cmd := &cobra.Command{
-		Use:  "ragrep",
+		Use:  "ragx",
 		Args: cobra.NoArgs,
 		CompletionOptions: cobra.CompletionOptions{
 			DisableDefaultCmd: true,
 		}, Short: "",
-		Long: `ragrep is a terminal-first RAG assistant. 
+		Long: `ragx is a terminal-first RAG assistant. 
 Embed data, run retrieval, and query local or remote OpenAI API-compatible LLMs.`,
 		SilenceUsage: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {

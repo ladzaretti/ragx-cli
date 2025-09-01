@@ -4,7 +4,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/ladzaretti/ragrep/cli"
+	"github.com/ladzaretti/ragx/cli"
 )
 
 func TestChunkText(t *testing.T) {

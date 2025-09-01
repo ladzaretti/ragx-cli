@@ -30,7 +30,7 @@ type EmbeddingConfig struct {
 }
 
 type LoggingConfig struct {
-	Dir      string `json:"log_dir,omitempty"   toml:"log_dir,commented"      comment:"Directory where log file will be stored (default: XDG_STATE_HOME or ~/.local/state/ragrep)"`
+	Dir      string `json:"log_dir,omitempty"   toml:"log_dir,commented"      comment:"Directory where log file will be stored (default: XDG_STATE_HOME or ~/.local/state/ragx)"`
 	Filename string `json:"log_file,omitempty"  toml:"log_filename,commented" comment:"Filename for the log file"`
 	Level    string `json:"log_level,omitempty" toml:"log_level,commented"`
 }

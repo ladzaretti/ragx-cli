@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/ladzaretti/ragrep/llm"
+	"github.com/ladzaretti/ragx/llm"
 )
 
 type Provider struct {

@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/ladzaretti/ragrep/clierror"
-	"github.com/ladzaretti/ragrep/genericclioptions"
+	"github.com/ladzaretti/ragx/clierror"
+	"github.com/ladzaretti/ragx/genericclioptions"
 	"github.com/spf13/cobra"
 )
 
@@ -57,12 +57,12 @@ func NewCmdListModels(defaults *DefaultRAGOptions) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List available models",
-		Long:  "List all models available to ragrep from the configured LLM backend.",
+		Long:  "List all models available to ragx from the configured LLM backend.",
 		Example: `# list models from the active backend
-  ragrep list
+  ragx list
 
   # list models using a specific config file
-  ragrep list --config ~/.ragrep.toml`,
+  ragx list --config ~/.ragx.toml`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return clierror.Check(genericclioptions.ExecuteCommand(cmd.Context(), o))
 		},

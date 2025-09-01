@@ -8,12 +8,12 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/ladzaretti/ragrep/vecdb"
+	"github.com/ladzaretti/ragx/vecdb"
 )
 
-const name = "ragrep"
+const name = "ragx"
 
-// DefaultSystemPrompt is the base, terminal-first system prompt for a ragrep CLI.
+// DefaultSystemPrompt is the base, terminal-first system prompt for a ragx CLI.
 const DefaultSystemPrompt = `You are ` + name + `, a terminal-first assistant that answers strictly from the provided context chunks.
 
 GROUNDING & RETRIEVAL

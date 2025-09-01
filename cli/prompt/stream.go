@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/ladzaretti/ragrep/llm"
-	"github.com/ladzaretti/ragrep/vecdb"
+	"github.com/ladzaretti/ragx/llm"
+	"github.com/ladzaretti/ragx/vecdb"
 )
 
 type Chunk struct {

@@ -12,11 +12,11 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/ladzaretti/ragrep/cli/prompt"
-	"github.com/ladzaretti/ragrep/clierror"
-	"github.com/ladzaretti/ragrep/genericclioptions"
-	"github.com/ladzaretti/ragrep/llm"
-	"github.com/ladzaretti/ragrep/types"
+	"github.com/ladzaretti/ragx/cli/prompt"
+	"github.com/ladzaretti/ragx/clierror"
+	"github.com/ladzaretti/ragx/genericclioptions"
+	"github.com/ladzaretti/ragx/llm"
+	"github.com/ladzaretti/ragx/types"
 
 	"github.com/spf13/cobra"
 )
@@ -234,16 +234,16 @@ Query is required and can be provided in the following precedence:
 When paths are provided, files are included if they match any -M/--match regex (full path).
 If no -M filter is given, all files under the provided paths are embedded.`,
 		Example: `  # embed all .go files in current dir and query via --query/-q
-  ragrep query . -M '\.go$' -q "<query>"
+  ragx query . -M '\.go$' -q "<query>"
 
   # embed a single file and provide query after flag terminator --
-  ragrep query readme.md -- "<query>"
+  ragx query readme.md -- "<query>"
 
   # embed stdin and provide query as the last positional argument
-  cat readme.md | ragrep query "<query>"
+  cat readme.md | ragx query "<query>"
 
   # embed multiple paths with filter
-  ragrep query docs src -M '(?i)\.(md|txt)$' -q "<query>"`,
+  ragx query docs src -M '(?i)\.(md|txt)$' -q "<query>"`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return cmp.Or(

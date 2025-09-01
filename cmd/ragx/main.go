@@ -3,13 +3,13 @@ package main
 import (
 	"os"
 
-	"github.com/ladzaretti/ragrep/cli"
-	"github.com/ladzaretti/ragrep/clierror"
-	"github.com/ladzaretti/ragrep/genericclioptions"
+	"github.com/ladzaretti/ragx/cli"
+	"github.com/ladzaretti/ragx/clierror"
+	"github.com/ladzaretti/ragx/genericclioptions"
 )
 
 func main() {
-	clierror.SetName("ragrep")
+	clierror.SetName("ragx")
 
 	io := genericclioptions.NewDefaultIOStreams()
 	rag := cli.NewDefaultRAGCommand(io, os.Args[1:])

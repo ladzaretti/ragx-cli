@@ -1,7 +1,7 @@
 package cli
 
 import (
-	"github.com/ladzaretti/ragrep/genericclioptions"
+	"github.com/ladzaretti/ragx/genericclioptions"
 	"github.com/spf13/cobra"
 )
 

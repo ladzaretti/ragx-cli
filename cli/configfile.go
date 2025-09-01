@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ladzaretti/ragrep/types"
+	"github.com/ladzaretti/ragx/types"
 	"github.com/pelletier/go-toml/v2"
 )
 
