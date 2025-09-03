@@ -420,10 +420,18 @@ func (m *model) View() string {
 }
 
 // handleKey routes key events based on focus.
-func (m *model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) { //nolint:cyclop
 	switch k.String() {
 	case "ctrl+c":
 		return m, tea.Quit
+
+	case "ctrl+n":
+		m.historyBuilder.Reset()
+		m.viewport.SetContent("")
+		m.contextUsed.Used = 0
+		m.focus(focusTextarea)
+
+		return m, textinput.Blink
 
 	case "ctrl+a":
 		m.prefixActive = !m.prefixActive
@@ -716,6 +724,7 @@ func (m *model) legend() string {
 			legendItem("^S", "SEND"), divider,
 			legendItem("ESC", "CANCEL"), divider,
 			legendItem("^A", "PREFIX"), divider,
+			legendItem("^N", "NEW CHAT"), divider,
 			legendItem("^C", "QUIT"),
 		)
 	}

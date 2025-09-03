@@ -14,6 +14,7 @@ import (
 	"github.com/ladzaretti/ragx/vecdb"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 var Version = "0.0.0"
@@ -168,6 +169,12 @@ func (o *DefaultRAGOptions) addStep(s step) {
 	o.steps = append(o.steps, s)
 }
 
+func (o *DefaultRAGOptions) massageFlags(f *pflag.FlagSet) {
+	if !f.Lookup("temp").Changed {
+		o.configOptions.flags.temperature = -1
+	}
+}
+
 func (o *DefaultRAGOptions) initLogger() error {
 	dir := o.configOptions.resolved.Logging.Dir
 	name := o.configOptions.resolved.Logging.Filename
@@ -248,7 +255,9 @@ func NewDefaultRAGCommand(iostreams *genericclioptions.IOStreams, args []string)
 Embed data, run retrieval, and query local or remote OpenAI API-compatible LLMs.`,
 		SilenceUsage: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			o.massageFlags(cmd.Flags())
 			o.planFor(cmd)
+
 			return clierror.Check(genericclioptions.ExecuteCommand(cmd.Context(), o, args...))
 		},
 		PersistentPostRunE: func(_ *cobra.Command, _ []string) error {
@@ -258,8 +267,9 @@ Embed data, run retrieval, and query local or remote OpenAI API-compatible LLMs.
 
 	cmd.SetArgs(args)
 
-	cmd.PersistentFlags().Float64VarP(&o.configOptions.flags.temperature, "temp", "t", -1, "default sampling temperature (0.0-2.0)")
-	cmd.PersistentFlags().IntVarP(&o.configOptions.flags.contextLength, "context", "x", -1, "default context length in tokens")
+	cmd.PersistentFlags().Float64VarP(&o.configOptions.flags.temperature, "temp", "t", 0, "default sampling temperature (0.0-2.0)")
+	cmd.PersistentFlags().IntVarP(&o.configOptions.flags.contextLength, "context", "x", 0, "default context length in tokens")
+	cmd.PersistentFlags().IntVarP(&o.configOptions.flags.topK, "topk", "k", 0, "number of retrieved chunks")
 	cmd.PersistentFlags().StringVarP(&o.configOptions.flags.model, "model", "m", "", "set LLM model")
 	cmd.PersistentFlags().StringVarP(&o.configOptions.flags.configPath, "config", "c", "", fmt.Sprintf("path to config file (default: ~/%s)", defaultConfigName))
 	cmd.PersistentFlags().StringVarP(&o.configOptions.flags.embeddingModel, "embedding-model", "e", "", "set embedding model")
@@ -273,6 +283,7 @@ Embed data, run retrieval, and query local or remote OpenAI API-compatible LLMs.
 		"config",
 		"dim",
 		"embedding-model",
+		"topk",
 		"log-dir",
 		"log-file",
 		"log-level",

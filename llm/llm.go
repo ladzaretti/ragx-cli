@@ -493,6 +493,7 @@ func (s *ChatSession) SendStreaming(ctx context.Context, req ChatCompletionReque
 
 		content := buf.String()
 		if content != "" {
+			// TODO: remove thinking from content
 			param := openai.ChatCompletionMessage{Content: content, Role: "assistant"}.ToParam()
 			s.history = append(s.history, param)
 			s.contextUsed = s.tokenCounter.Count(s.history...)

@@ -56,6 +56,7 @@ type Flags struct {
 	temperature    float64
 	contextLength  int
 	embeddingModel string
+	topK           int
 	logDir         string
 	logFilename    string
 	logLevel       string
@@ -113,6 +114,7 @@ func (o *configOptions) resolve() error {
 	o.resolved.Prompt.UserPromptTmpl = cmp.Or(o.fileConfig.Prompt.UserPromptTmpl, prompt.DefaultUserPromptTmpl)
 
 	o.resolved.Embedding.Model = cmp.Or(o.flags.embeddingModel, o.fileConfig.Embedding.Model)
+	o.resolved.Embedding.TopK = cmp.Or(o.flags.topK, o.fileConfig.Embedding.TopK)
 
 	o.resolved.Logging.Dir = cmp.Or(o.flags.logDir, o.fileConfig.Logging.Dir)
 	o.resolved.Logging.Filename = cmp.Or(o.flags.logFilename, o.fileConfig.Logging.Filename)
@@ -141,6 +143,7 @@ func NewCmdConfig(defaults *DefaultRAGOptions) *cobra.Command {
 		"base-url",
 		"dim",
 		"embedding-model",
+		"topk",
 		"match",
 		"model",
 		"temp",
