@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"regexp"
 	"strings"
 	"unicode/utf8"
 
@@ -416,7 +417,11 @@ func (s *ChatSession) Send(ctx context.Context, req ChatCompletionRequest) (*Cha
 	}
 
 	msg := completion.Choices[0].Message
-	s.history = append(s.history, msg.ToParam())
+
+	s.history = append(s.history, openai.ChatCompletionMessage{
+		Role:    msg.Role,
+		Content: StripThinking(msg.Content),
+	}.ToParam())
 	s.contextUsed = s.tokenCounter.Count(s.history...)
 
 	s.logger.Info("saved assistant message", "content_present", msg.Content != "")
@@ -491,9 +496,8 @@ func (s *ChatSession) SendStreaming(ctx context.Context, req ChatCompletionReque
 			return
 		}
 
-		content := buf.String()
+		content := StripThinking(buf.String())
 		if content != "" {
-			// TODO: remove thinking from content
 			param := openai.ChatCompletionMessage{Content: content, Role: "assistant"}.ToParam()
 			s.history = append(s.history, param)
 			s.contextUsed = s.tokenCounter.Count(s.history...)
@@ -607,4 +611,10 @@ func IsRetryableError(err error) bool {
 	}
 
 	return false
+}
+
+var thinkRE = regexp.MustCompile(`(?is)<think\b[^>]*>.*?</think>`)
+
+func StripThinking(s string) string {
+	return strings.TrimSpace(thinkRE.ReplaceAllString(s, ""))
 }

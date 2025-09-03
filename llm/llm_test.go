@@ -9,6 +9,55 @@ import (
 	openai "github.com/openai/openai-go/v2"
 )
 
+func TestStripThinking(t *testing.T) {
+	type testCase struct {
+		name  string
+		input string
+		want  string
+	}
+
+	tests := []testCase{
+		{
+			name:  "no tags unchanged",
+			input: "foo",
+			want:  "foo",
+		},
+		{
+			name:  "single tag removed",
+			input: "foo <think>bar</think> baz",
+			want:  "foo  baz",
+		},
+		{
+			name:  "multiple tags removed",
+			input: "foo <think>bar</think> baz <think>qux</think> quux",
+			// note: two spaces where each <think>..</think> was removed
+			want: "foo  baz  quux",
+		},
+		{
+			name:  "mixed case tag and attributes multiline",
+			input: "foo <THINK attr=''>bar\nbaz</THINK> qux",
+			// newline inside the tag is removed along with the tag content
+			want: "foo  qux",
+		},
+		{
+			name:  "preserve surrounding whitespace",
+			input: "  foo <think>bar</think>   baz   <think>qux</think>  quux  ",
+			// spaces around removed tags are preserved exactly
+			want: "  foo    baz     quux  ",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := llm.StripThinking(tt.input)
+
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("strip thinking (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 func TestTruncateHistory(t *testing.T) {
 	type testCase struct {
 		name         string
