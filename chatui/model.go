@@ -23,9 +23,9 @@ import (
 )
 
 const (
-	listWidth     = 24
-	textareaHight = 2
-	extraLines    = 2 // 1L spinner + 1L status bar
+	listWidth      = 24
+	textareaHeight = 2
+	statusBarLines = 1
 
 	reasoningStartTag = "<think>"
 	reasoningEndTag   = "</think>"
@@ -147,7 +147,7 @@ func New(providers types.Providers, vecdb *vecdb.VectorDB, llmConfig LLMConfig) 
 	ta.Focus()
 	ta.Prompt = ""
 	ta.FocusedStyle.CursorLine = lipgloss.NewStyle()
-	ta.SetHeight(textareaHight)
+	ta.SetHeight(textareaHeight)
 	ta.ShowLineNumbers = false
 	ta.FocusedStyle.Base = lipgloss.NewStyle().
 		PaddingTop(0).
@@ -624,14 +624,14 @@ func (m *model) resize(w tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	m.viewport.Width = w.Width
 
 	m.textarea.SetWidth(vpWidth)
-	m.textarea.SetHeight(textareaHight)
+	m.textarea.SetHeight(textareaHeight)
 
 	m.refreshLegend()
 
 	m.legendHeight = lipgloss.Height(m.legendWrapped)
 	m.statusHeight = lipgloss.Height(m.statusWrapped)
 
-	reserved := extraLines
+	reserved := statusBarLines
 	if m.asciiShow {
 		reserved += asciiLines
 	}
