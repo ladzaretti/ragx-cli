@@ -400,6 +400,11 @@ func (m *model) View() string {
 	m.statusWrapped = barStyle.Width(m.width).
 		Render(lipgloss.JoinHorizontal(lipgloss.Left, footerItems...))
 
+	textarea := lipgloss.JoinHorizontal(lipgloss.Top,
+		caretStyle.Render("❯ "),
+		m.textarea.View(),
+	)
+
 	var b strings.Builder
 
 	b.WriteString(main)
@@ -410,7 +415,7 @@ func (m *model) View() string {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(m.textarea.View())
+	b.WriteString(textarea)
 	b.WriteString("\n")
 	b.WriteString(m.legendWrapped)
 	b.WriteString("\n")

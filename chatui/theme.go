@@ -48,6 +48,7 @@ var (
 	dimStyle              = lipgloss.NewStyle().Foreground(lipgloss.Color(mochaOverlay2))
 	spinnerStyle          = lipgloss.NewStyle().Foreground(lipgloss.Color(mochaMauve))
 	userPrefixStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color(mochaBlue)).Bold(true)
+	caretStyle            = lipgloss.NewStyle().Foreground(lipgloss.Color(mochaSubtext0)).Bold(true)
 	llmPrefixStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color(mochaMauve)).Bold(true)
 	reasoningTextStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color(mochaSubtext0)).Italic(true)
 	reasoningSpinnerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(mochaOverlay2)).Faint(true)
