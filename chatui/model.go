@@ -230,7 +230,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:cyclop,gocog
 
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
-		return m.resize(msg)
+		return m.updateLayout(msg)
 
 	case tea.BlurMsg:
 		m.textarea.Blur()
@@ -342,6 +342,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:cyclop,gocog
 
 	// bubble internal updates
 
+	return m.defaultUpdate(msg)
+}
+
+func (m *model) defaultUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var (
 		taCmd tea.Cmd
 		vpCmd tea.Cmd
@@ -419,6 +423,8 @@ func (m *model) View() string {
 	return b.String()
 }
 
+type layoutMsg = tea.WindowSizeMsg
+
 // handleKey routes key events based on focus.
 func (m *model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) { //nolint:cyclop
 	switch k.String() {
@@ -436,18 +442,19 @@ func (m *model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) { //nolint:cyclop
 	case "ctrl+a":
 		m.prefixActive = !m.prefixActive
 
-		m.refreshLegend()
-
 		if m.prefixActive {
-			m.legendWrapped = lipgloss.NewStyle().Width(m.width).Render(m.legend())
+			m.refreshLegend()
 			m.textarea.Blur()
-
-			return m, nil
+		} else {
+			m.focus(focusTextarea)
 		}
 
-		m.focus(focusTextarea)
+		m, cmd := m.updateLayout(layoutMsg{
+			Width:  m.width,
+			Height: m.height,
+		})
 
-		return m, textinput.Blink
+		return m, tea.Batch(cmd, textinput.Blink)
 
 	case "esc": //nolint:goconst
 		if m.prefixActive {
@@ -619,7 +626,7 @@ func (m *model) sendPrompt(q string) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(m.spinner.Tick, m.startRAGCmd(ctx, q))
 }
 
-func (m *model) resize(w tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
+func (m *model) updateLayout(w tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	vpWidth := max(w.Width, 1)
 	m.viewport.Width = w.Width
 
