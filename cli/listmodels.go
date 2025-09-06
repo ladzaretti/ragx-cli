@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/ladzaretti/ragx/clierror"
-	"github.com/ladzaretti/ragx/genericclioptions"
+	"github.com/ladzaretti/ragx-cli/clierror"
+	"github.com/ladzaretti/ragx-cli/genericclioptions"
 	"github.com/spf13/cobra"
 )
 

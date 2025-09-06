@@ -8,7 +8,6 @@ services:
       - "11434:11434"
     volumes:
       - ollama:/root/.ollama
-      - ./modelfiles:/modelfiles
     restart: unless-stopped
 
 volumes:

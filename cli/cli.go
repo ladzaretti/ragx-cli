@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 	"regexp"
 
-	"github.com/ladzaretti/ragx/clierror"
-	"github.com/ladzaretti/ragx/genericclioptions"
-	"github.com/ladzaretti/ragx/types"
-	"github.com/ladzaretti/ragx/vecdb"
+	"github.com/ladzaretti/ragx-cli/clierror"
+	"github.com/ladzaretti/ragx-cli/genericclioptions"
+	"github.com/ladzaretti/ragx-cli/types"
+	"github.com/ladzaretti/ragx-cli/vecdb"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -271,7 +271,7 @@ Embed data, run retrieval, and query local or remote OpenAI API-compatible LLMs.
 	cmd.PersistentFlags().IntVarP(&o.configOptions.flags.contextLength, "context", "x", 0, "default context length in tokens")
 	cmd.PersistentFlags().IntVarP(&o.configOptions.flags.topK, "topk", "k", 0, "number of retrieved chunks")
 	cmd.PersistentFlags().StringVarP(&o.configOptions.flags.model, "model", "m", "", "set LLM model")
-	cmd.PersistentFlags().StringVarP(&o.configOptions.flags.configPath, "config", "c", "", fmt.Sprintf("path to config file (default: ~/%s)", defaultConfigName))
+	cmd.PersistentFlags().StringVarP(&o.configOptions.flags.configPath, "config", "c", "", fmt.Sprintf("path to config file (default: %q in the home directory)", defaultConfigName))
 	cmd.PersistentFlags().StringVarP(&o.configOptions.flags.embeddingModel, "embedding-model", "e", "", "set embedding model")
 	cmd.PersistentFlags().StringVarP(&o.configOptions.flags.logDir, "log-dir", "d", "", "set log directory")
 	cmd.PersistentFlags().StringVarP(&o.configOptions.flags.logFilename, "log-file", "f", "", "set log filename")

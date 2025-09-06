@@ -53,12 +53,6 @@ jobs:
         with:
           name: linux_arm64
           path: dist/*linux_arm64*.tar.gz
-
-      - name: Upload linux_386
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux_386
-          path: dist/*linux_386*.tar.gz
       
       - name: Upload checksums
         uses: actions/upload-artifact@v4
