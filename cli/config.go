@@ -10,10 +10,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/ladzaretti/ragx/cli/prompt"
-	"github.com/ladzaretti/ragx/clierror"
-	"github.com/ladzaretti/ragx/genericclioptions"
-	"github.com/ladzaretti/ragx/types"
+	"github.com/ladzaretti/ragx-cli/cli/prompt"
+	"github.com/ladzaretti/ragx-cli/clierror"
+	"github.com/ladzaretti/ragx-cli/genericclioptions"
+	"github.com/ladzaretti/ragx-cli/types"
 
 	"github.com/spf13/cobra"
 )

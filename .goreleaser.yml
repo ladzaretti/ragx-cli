@@ -5,7 +5,12 @@ builds:
     main: ./cmd/ragx
     binary: ragx
     goos:
+      - darwin
       - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
     ldflags:
       - -X main.Version={{ if .IsSnapshot }}{{ .Version }}{{ else }}{{ .Tag }}{{ end }}
 

@@ -3,9 +3,9 @@ package main
 import (
 	"os"
 
-	"github.com/ladzaretti/ragx/cli"
-	"github.com/ladzaretti/ragx/clierror"
-	"github.com/ladzaretti/ragx/genericclioptions"
+	"github.com/ladzaretti/ragx-cli/cli"
+	"github.com/ladzaretti/ragx-cli/clierror"
+	"github.com/ladzaretti/ragx-cli/genericclioptions"
 )
 
 func main() {

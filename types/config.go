@@ -3,7 +3,7 @@ package types
 type LLMConfig struct {
 	DefaultModel string           `json:"default_model,omitempty" toml:"default_model"       comment:"Default model to use"`
 	Providers    []ProviderConfig `json:"providers,omitempty"     toml:"providers,commented" comment:"LLM providers (uncomment and duplicate as needed)\n[[llm.providers]]\nbase_url = 'http://localhost:11434'\napi_key = '<KEY>'\t\t# optional\ntemperature = 0.7\t\t# optional (provider default)"`
-	Models       []ModelConfig    `json:"models,omitempty"        toml:"models,commented"    comment:"Optional model definitions for context length control (uncomment and duplicate as needed)\n[[llm.models]]\nid = 'qwen:8b-fast'\t\t# Model identifier\ncontext = 4096\t\t# Maximum context length in tokens\ntemperature = 0.7\t\t# optional (model override)"`
+	Models       []ModelConfig    `json:"models,omitempty"        toml:"models,commented"    comment:"Optional model definitions for context length control (uncomment and duplicate as needed)\n[[llm.models]]\nid = 'qwen:8b'\t\t# Model identifier\ncontext = 4096\t\t# Maximum context length in tokens\ntemperature = 0.7\t\t# optional (model override)"`
 }
 
 type ModelConfig struct {
@@ -19,7 +19,7 @@ type ProviderConfig struct {
 
 type PromptConfig struct {
 	System         string `json:"system_prompt,omitempty"    toml:"system_prompt,commented"    comment:"System prompt to override the default assistant behavior"`
-	UserPromptTmpl string `json:"user_prompt_tmpl,omitempty" toml:"user_prompt_tmpl,commented" comment:"Go text/template for building the USER QUERY + CONTEXT block"`
+	UserPromptTmpl string `json:"user_prompt_tmpl,omitempty" toml:"user_prompt_tmpl,commented" comment:"Go text/template for building the USER QUERY + CONTEXT block.\nSupported template vars:\n  .Query   — the user's raw query string\n  .Chunks  — slice of retrieved chunks (may be empty). Each chunk has:\n      .ID       — numeric identifier of the chunk\n      .Source   — source file/path of the chunk\n      .Content  — text content of the chunk"`
 }
 
 type EmbeddingConfig struct {

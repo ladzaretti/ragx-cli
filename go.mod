@@ -1,4 +1,4 @@
-module github.com/ladzaretti/ragx
+module github.com/ladzaretti/ragx-cli
 
 go 1.24.0
 

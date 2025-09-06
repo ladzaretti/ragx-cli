@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/ladzaretti/ragx/llm"
+	"github.com/ladzaretti/ragx-cli/llm"
 
 	openai "github.com/openai/openai-go/v2"
 )
@@ -43,7 +43,7 @@ func TestStripThinking(t *testing.T) {
 			name:  "preserve surrounding whitespace",
 			input: "  foo <think>bar</think>   baz   <think>qux</think>  quux  ",
 			// spaces around removed tags are preserved exactly
-			want: "  foo    baz     quux  ",
+			want: "foo    baz     quux",
 		},
 	}
 

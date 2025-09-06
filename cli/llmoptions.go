@@ -9,10 +9,10 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/ladzaretti/ragx/genericclioptions"
-	"github.com/ladzaretti/ragx/llm"
-	"github.com/ladzaretti/ragx/types"
-	"github.com/ladzaretti/ragx/vecdb"
+	"github.com/ladzaretti/ragx-cli/genericclioptions"
+	"github.com/ladzaretti/ragx-cli/llm"
+	"github.com/ladzaretti/ragx-cli/types"
+	"github.com/ladzaretti/ragx-cli/vecdb"
 
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
