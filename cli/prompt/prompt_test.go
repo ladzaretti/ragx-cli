@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/ladzaretti/ragx/cli/prompt"
-	"github.com/ladzaretti/ragx/vecdb"
+	"github.com/ladzaretti/ragx-cli/cli/prompt"
+	"github.com/ladzaretti/ragx-cli/vecdb"
 )
 
 func TestPrompt_BuildUserPrompt(t *testing.T) {

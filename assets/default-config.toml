@@ -1,0 +1,42 @@
+[llm]
+# Default model to use
+default_model = ''
+# LLM providers (uncomment and duplicate as needed)
+# [[llm.providers]]
+# base_url = 'http://localhost:11434'
+# api_key = '<KEY>'		# optional
+# temperature = 0.7		# optional (provider default)
+# Optional model definitions for context length control (uncomment and duplicate as needed)
+# [[llm.models]]
+# id = 'qwen:8b'		# Model identifier
+# context = 4096		# Maximum context length in tokens
+# temperature = 0.7		# optional (model override)
+
+[prompt]
+# System prompt to override the default assistant behavior
+# system_prompt = ''
+# Go text/template for building the USER QUERY + CONTEXT block.
+# Supported template vars:
+#   .Query   — the user's raw query string
+#   .Chunks  — slice of retrieved chunks (may be empty). Each chunk has:
+#       .ID       — numeric identifier of the chunk
+#       .Source   — source file/path of the chunk
+#       .Content  — text content of the chunk
+# user_prompt_tmpl = ''
+
+[embedding]
+# Model used for embeddings
+embedding_model = ''
+# Number of characters per chunk
+# chunk_size = 2000
+# Number of characters overlapped between chunks (must be less than chunk_size)
+# overlap = 200
+# Number of chunks to retrieve during RAG
+# top_k = 20
+
+# [logging]
+# Directory where log file will be stored (default: XDG_STATE_HOME or ~/.local/state/ragx)
+# log_dir = '/home/gbi/.local/state/ragx'
+# Filename for the log file
+# log_filename = '.log'
+# log_level = 'info'

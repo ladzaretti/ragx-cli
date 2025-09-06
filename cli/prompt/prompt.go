@@ -8,7 +8,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/ladzaretti/ragx/vecdb"
+	"github.com/ladzaretti/ragx-cli/vecdb"
 )
 
 // DefaultSystemPrompt is the base, terminal-first system prompt for a ragx CLI.

@@ -1,9 +1,9 @@
 .vscode
-**/coverage
 !assets/coverage
+modelfiles
+**/coverage
 **/dist
 **/bin
 *~
 .template
-.todo
 TODO.md
