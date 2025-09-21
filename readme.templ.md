@@ -1,18 +1,16 @@
 <!-- omit in toc -->
 # ragx — a terminal first local RAG assistant
 
-![status: experimental](https://img.shields.io/badge/status-experimental-yellow)
+![status: beta](https://img.shields.io/badge/status-beta-yellow)
 [![Go Report Card](https://goreportcard.com/badge/github.com/ladzaretti/ragx-cli)](https://goreportcard.com/report/github.com/ladzaretti/ragx-cli)
 ![license](https://img.shields.io/github/license/ladzaretti/ragx-cli)
-
-> [!NOTE]
-> **Experimental project**: This is an experimental exploration of LLM programming. Expect some rough edges and ongoing changes as it evolves.
 
 `ragx` is a minimal and hackable **Retrieval-Augmented Generation (RAG)** CLI tool designed for the terminal. It embeds your local files (or stdin), retrieves relevant chunks with KNN search, and queries OpenAI-compatible LLMs (local or remote) via a CLI/TUI workflow.
 
 <details>
 <summary>Table of Contents (click to expand)</summary>
 
+- [Why ragx-cli?](#why-ragx-cli)
 - [Supported platforms](#supported-platforms)
 - [Installation](#installation)
   - [Option 1: Install via Go](#option-1-install-via-go)
@@ -35,15 +33,21 @@
 
 </details>
 
+## Why ragx-cli?
+- **Local first or API backed** – run fully offline with Ollama, or connect to OpenAI/ChatGPT APIs.  
+- **Minimal stack** – Go + SQLite-vec + Ollama/OpenAI.  
+- **Terminal native** – query via CLI or lightweight TUI.  
+- **Configurable** – tweak system/user prompts and RAG parameters (chunk size, overlap, model, etc.).  
+
 ## Supported platforms
 
 Binaries are built for:
 
-| OS      | Architectures | Tested on        |
-| ------- | ------------- | ---------------- |
+| OS      | Architectures | Tested on              |
+| ------- | ------------- | ---------------------- |
 | Linux   | amd64, arm64  | ✅ Fedora 43, Debian 13 |
-| macOS   | amd64, arm64  | ❌ not tested     |
-| Windows | amd64, arm64  | ❌ not tested     |
+| macOS   | amd64, arm64  | ❌ not tested           |
+| Windows | amd64, arm64  | ❌ not tested           |
 
 >[!IMPORTANT]
 > Only Linux has been tested so far. Other platforms are built but unverified, feedback is welcome.
