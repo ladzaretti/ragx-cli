@@ -5,7 +5,7 @@ BIN_NAME ?= ragx
 VERSION ?= 0.0.0
 
 # renovate: datasource=github-releases depName=golangci/golangci-lint
-GOLANGCI_VERSION ?= v2.4.0
+GOLANGCI_VERSION ?= v2.6.2
 TEST_ARGS = -v -timeout 40s -coverpkg=./...
 
 PKG_PATH ?= main
