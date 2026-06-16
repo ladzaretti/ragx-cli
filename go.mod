@@ -1,6 +1,6 @@
 module github.com/ladzaretti/ragx-cli
 
-go 1.24.0
+go 1.25.0
 
 require (
 	github.com/asg017/sqlite-vec-go-bindings v0.1.6
@@ -43,7 +43,7 @@ require (
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tidwall/sjson v1.2.5 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
-	golang.org/x/sync v0.16.0
+	golang.org/x/sync v0.21.0
 	golang.org/x/sys v0.34.0 // indirect
 	golang.org/x/text v0.27.0 // indirect
 )
