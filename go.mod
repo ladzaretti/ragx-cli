@@ -1,6 +1,6 @@
 module github.com/ladzaretti/ragx-cli
 
-go 1.24.0
+go 1.25.0
 
 require (
 	github.com/asg017/sqlite-vec-go-bindings v0.1.6
@@ -9,7 +9,8 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/google/go-cmp v0.7.0
 	github.com/ncruces/go-sqlite3 v0.20.3
-	github.com/openai/openai-go/v2 v2.1.1
+	github.com/openai/openai-go/v2 v2.7.1
+	github.com/openai/openai-go/v3 v3.46.0
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/pflag v1.0.9
 )
@@ -38,12 +39,12 @@ require (
 	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/sahilm/fuzzy v0.1.1 // indirect
-	github.com/tidwall/gjson v1.18.0 // indirect
+	github.com/tidwall/gjson v1.19.0 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tidwall/sjson v1.2.5 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
-	golang.org/x/sync v0.16.0
-	golang.org/x/sys v0.34.0 // indirect
-	golang.org/x/text v0.27.0 // indirect
+	golang.org/x/sync v0.22.0
+	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/text v0.40.0 // indirect
 )
