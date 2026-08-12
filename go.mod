@@ -4,7 +4,7 @@ go 1.24.0
 
 require (
 	github.com/asg017/sqlite-vec-go-bindings v0.1.6
-	github.com/charmbracelet/bubbles v0.21.0
+	github.com/charmbracelet/bubbles/v2 v2.1.1
 	github.com/charmbracelet/bubbletea v1.3.6
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/google/go-cmp v0.7.0
